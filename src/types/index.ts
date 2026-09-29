@@ -143,6 +143,11 @@ export interface AppSettings {
     messagingSenderId: string;
     appId: string;
   };
+  enableOwnerEmailAlerts?: boolean;
+  ownerAlertEmail?: string;
+  emailProviderApiKey?: string;
+  emailSenderAddress?: string;
+  lastOwnerEmailAlertSentAt?: string;
 }
 
 export interface CustomerMatchReport {

@@ -7,7 +7,8 @@ import {
   Volume2, 
   VolumeX, 
   Lock, 
-  Menu
+  Menu,
+  RefreshCw
 } from 'lucide-react';
 import { audioAlerts } from '@/lib/audio-alerts';
 
@@ -118,7 +119,7 @@ export const TopBar: React.FC<TopBarProps> = ({
         <button
           onClick={onToggleAudio}
           title={audioEnabled ? 'Audio Alerts Enabled (Click to Mute)' : 'Audio Alerts Muted (Click to Unmute)'}
-          className={`p-2 rounded-xl border transition-all text-xs flex items-center gap-1.5 ${
+          className={`p-2 rounded-xl border transition-all text-xs flex items-center gap-1.5 cursor-pointer ${
             audioEnabled
               ? 'bg-teal-50 border-teal-200 text-teal-700 hover:bg-teal-100'
               : 'bg-slate-50 border-slate-200 text-slate-400 hover:bg-slate-100'
@@ -128,6 +129,38 @@ export const TopBar: React.FC<TopBarProps> = ({
           <span className="hidden xl:inline text-[11px] font-medium">
             {audioEnabled ? 'Sound On' : 'Muted'}
           </span>
+        </button>
+
+        {/* Real-time Cloud Sync Button (Next to Sound ON) */}
+        <button
+          onClick={onManualSync}
+          disabled={isSyncing}
+          title={
+            isSyncing 
+              ? 'Synchronizing data with Cloud Firestore across all devices...' 
+              : syncStatus === 'synced'
+              ? 'Cloud Database Synced (Click to Force Refresh from Cloud)'
+              : syncStatus === 'error'
+              ? 'Sync Error (Click to Retry)'
+              : 'Click to Sync Data across All Devices'
+          }
+          className={`px-2.5 py-1.5 rounded-xl border transition-all text-xs flex items-center gap-1.5 cursor-pointer shadow-2xs ${
+            isSyncing
+              ? 'bg-teal-50 border-teal-300 text-teal-700'
+              : syncStatus === 'synced'
+              ? 'bg-emerald-50/80 border-emerald-200 text-emerald-800 hover:bg-emerald-100 hover:border-emerald-300'
+              : syncStatus === 'error'
+              ? 'bg-rose-50 border-rose-200 text-rose-700 hover:bg-rose-100'
+              : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
+          }`}
+        >
+          <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin text-teal-600' : syncStatus === 'synced' ? 'text-emerald-600' : 'text-slate-600'}`} />
+          <span className="text-[11px] font-bold">
+            {isSyncing ? 'Syncing...' : 'Sync'}
+          </span>
+          <span className={`w-1.5 h-1.5 rounded-full ${
+            isSyncing ? 'bg-amber-500 animate-pulse' : syncStatus === 'synced' ? 'bg-emerald-500' : 'bg-slate-400'
+          }`} />
         </button>
 
 

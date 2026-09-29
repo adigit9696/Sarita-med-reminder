@@ -22,6 +22,7 @@ import { matchAndMergeCustomers } from '@/lib/customer-matcher';
 import { audioAlerts } from '@/lib/audio-alerts';
 import { PinVerifyModal } from '@/components/lock/PinVerifyModal';
 import { MonthlyAuditDrawer } from './MonthlyAuditDrawer';
+import { dataStore } from '@/lib/data-store';
 
 interface BillsAndUploadsViewProps {
   existingCustomers: Customer[];

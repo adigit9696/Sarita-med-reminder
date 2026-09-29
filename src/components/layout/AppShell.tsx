@@ -141,8 +141,11 @@ export const AppShell: React.FC = () => {
     if (nextVal) audioAlerts.playSuccessChime();
   };
 
-  const handleManualSync = () => {
-    dataStore.syncWithFirebase();
+  const handleManualSync = async () => {
+    const res = await dataStore.forcePullFromFirestore();
+    if (res.success) {
+      audioAlerts.playSuccessChime();
+    }
   };
 
   const handleExportData = () => {

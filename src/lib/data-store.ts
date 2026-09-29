@@ -232,19 +232,20 @@ class DataStoreService {
       const remoteBatches = await fetchBatchesFromFirestore();
       const remoteMonthly = await fetchMonthlyCustomersFromFirestore();
 
-      // Detection: When the user manually deletes everything from Firebase Firestore
-      // (customers, upload_batches, monthly_customers) to manage data manually:
+      // When remote is empty but local has newly uploaded data, auto-sync local data up to Firebase
       const isRemoteCompletelyEmpty = (remoteCustomers !== null && remoteCustomers.length === 0) &&
                                      (remoteBatches !== null && remoteBatches.length === 0);
 
-      if (isRemoteCompletelyEmpty) {
-        console.log('[Firebase Sync] Detected empty database in Cloud Firestore (collections deleted/wiped by user). Clearing local cache so app starts fresh with new batches.');
-        this.customers = [];
-        this.batches = [];
-        this.reminders = [];
-        this.persistLocalCustomers(true);
-        this.persistLocalBatches();
-        this.recalculateReminders();
+      if (isRemoteCompletelyEmpty && this.customers.length > 0) {
+        console.log(`[Firebase Sync] Remote database is empty. Auto-persisting ${this.customers.length} local customer records to Firebase 'all_customers'...`);
+        syncCustomersToFirestore(this.customers).catch(() => {});
+        if (this.batches.length > 0) {
+          syncBatchesToFirestore(this.batches).catch(() => {});
+        }
+        const localMonthly = this.customers.filter(c => c.isMonthlyRegular);
+        if (localMonthly.length > 0) {
+          syncAllMonthlyCustomersToFirestore(localMonthly).catch(() => {});
+        }
         this.firebaseSyncStatus = 'synced';
         this.isSyncingWithFirebase = false;
         this.notify();
@@ -252,9 +253,20 @@ class DataStoreService {
       }
 
       if (remoteCustomers && remoteCustomers.length > 0) {
-        // Authoritative cloud data: ensure all real customers from Firebase are set without mock pollution
-        this.customers = deduplicateCustomerList(remoteCustomers);
+        // Authoritative cloud data: ensure all real customers from Firebase are set without dropping local unsynced records
+        if (this.customers.length === 0) {
+          this.customers = deduplicateCustomerList(remoteCustomers);
+        } else {
+          const { merged } = mergeRemoteCustomers(this.customers, remoteCustomers);
+          this.customers = merged;
+          if (this.customers.length > remoteCustomers.length) {
+            syncCustomersToFirestore(this.customers).catch(() => {});
+          }
+        }
         this.persistLocalCustomers(true);
+      } else if (this.customers.length > 0) {
+        console.log(`[Firebase Sync] Firestore has 0 customers, pushing ${this.customers.length} local records to 'all_customers'...`);
+        syncCustomersToFirestore(this.customers).catch(() => {});
       }
 
       // Fetch dedicated monthly customers collection
@@ -276,8 +288,21 @@ class DataStoreService {
       }
 
       if (remoteBatches && remoteBatches.length > 0) {
-        this.batches = this.enrichBatches(remoteBatches);
+        const remoteIds = new Set(remoteBatches.map(b => b.id));
+        const combined = [...remoteBatches];
+        this.batches.forEach(b => {
+          if (!remoteIds.has(b.id)) {
+            combined.push(b);
+          }
+        });
+        this.batches = this.enrichBatches(combined);
         this.persistLocalBatches();
+        if (combined.length > remoteBatches.length) {
+          syncBatchesToFirestore(combined).catch(() => {});
+        }
+      } else if (this.batches.length > 0) {
+        console.log(`[Firebase Sync] Firestore has 0 batches, pushing ${this.batches.length} local batches to 'all_uploads'...`);
+        syncBatchesToFirestore(this.batches).catch(() => {});
       }
 
       this.recalculateReminders();
@@ -288,20 +313,8 @@ class DataStoreService {
         this.unsubscribeFirestore = subscribeToFirestore(
           (remoteCustomers) => {
             if (!this.isSyncingWithFirebase && Array.isArray(remoteCustomers)) {
-              if (remoteCustomers.length === 0 && this.customers.length > 0) {
-                // Check if batches are also empty (database wipe)
-                fetchBatchesFromFirestore().then(b => {
-                  if (b && b.length === 0) {
-                    console.log('[Real-time] Detected remote database wipe. Resetting local state.');
-                    this.customers = [];
-                    this.batches = [];
-                    this.reminders = [];
-                    this.persistLocalCustomers(true);
-                    this.persistLocalBatches();
-                    this.recalculateReminders();
-                    this.notify();
-                  }
-                });
+              if (remoteCustomers.length === 0) {
+                // Do not wipe local state on empty snapshot
                 return;
               }
 
@@ -316,18 +329,8 @@ class DataStoreService {
           },
           (remoteBatches) => {
             if (!this.isSyncingWithFirebase && Array.isArray(remoteBatches)) {
-              if (remoteBatches.length === 0 && this.batches.length > 0) {
-                fetchCustomersFromFirestore().then(c => {
-                  if (c && c.length === 0) {
-                    this.customers = [];
-                    this.batches = [];
-                    this.reminders = [];
-                    this.persistLocalCustomers(true);
-                    this.persistLocalBatches();
-                    this.recalculateReminders();
-                    this.notify();
-                  }
-                });
+              if (remoteBatches.length === 0) {
+                // Do not wipe local state on empty snapshot
                 return;
               }
 

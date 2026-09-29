@@ -6,6 +6,7 @@ import {
   Search, 
   ChevronRight, 
   ChevronLeft,
+  ChevronDown,
   ChevronsLeft,
   ChevronsRight,
   Filter, 
@@ -16,7 +17,10 @@ import {
   CheckSquare,
   Square,
   Keyboard,
-  Check
+  Check,
+  FolderTree,
+  Calendar,
+  Layers
 } from 'lucide-react';
 import type { Customer } from '@/types';
 
@@ -28,12 +32,14 @@ interface AllCustomersViewProps {
   onEditCustomer: (cust: Customer) => void;
 }
 
-// ================= MEMOIZED DESKTOP TABLE ROW =================
+// ================= MEMOIZED DESKTOP TABLE ROW WITH TREE STRUCTURE =================
 interface CustomerTableRowProps {
   cust: Customer;
   index: number;
   isFocused: boolean;
   isMonthly: boolean;
+  isTreeExpanded: boolean;
+  onToggleTree: () => void;
   onSelect: (cust: Customer) => void;
   onToggleMonthly: (id: string, isMonthly: boolean) => void;
   onEdit: (cust: Customer) => void;
@@ -45,142 +51,265 @@ const CustomerTableRow = React.memo<CustomerTableRowProps>(({
   index,
   isFocused,
   isMonthly,
+  isTreeExpanded,
+  onToggleTree,
   onSelect,
   onToggleMonthly,
   onEdit,
   setRef,
 }) => {
+  const safeName = cust.name || 'Unknown Patient';
+  const safeSpend = Number(cust.totalSpend) || 0;
+  const safeMeds = Array.isArray(cust.medicines) ? cust.medicines : [];
+  const safeDate = cust.lastPurchaseDate || 'N/A';
+  const safeMonths = cust.monthsActive || 1;
+
   return (
-    <tr
-      ref={setRef}
-      onClick={() => onSelect(cust)}
-      className={`transition-colors cursor-pointer group select-none ${
-        isFocused 
-          ? 'bg-teal-50/95 ring-2 ring-inset ring-teal-500/90 shadow-2xs font-medium' 
-          : 'hover:bg-slate-50/80'
-      }`}
-    >
-      <td className="py-3 px-3 text-center font-mono font-medium text-xs">
-        <span className={isFocused ? 'text-teal-700 font-bold' : 'text-slate-400'}>
-          {index + 1}
-        </span>
-      </td>
-      <td 
-        className="py-3 px-3 text-center"
-        onClick={(e) => {
-          e.stopPropagation();
-          onToggleMonthly(cust.id, !isMonthly);
-        }}
+    <React.Fragment>
+      <tr
+        ref={setRef}
+        onClick={() => onSelect(cust)}
+        className={`transition-colors cursor-pointer group select-none ${
+          isFocused 
+            ? 'bg-teal-50/95 ring-2 ring-inset ring-teal-500/90 shadow-2xs font-medium' 
+            : isTreeExpanded
+            ? 'bg-teal-50/30'
+            : 'hover:bg-slate-50/80'
+        }`}
       >
-        <div className="inline-flex items-center gap-1.5 justify-center">
+        {/* Tree Structure Toggle Column */}
+        <td 
+          className="py-3 px-2 text-center"
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleTree();
+          }}
+        >
           <button
             type="button"
             onClick={(e) => {
               e.stopPropagation();
-              onToggleMonthly(cust.id, !isMonthly);
+              onToggleTree();
             }}
-            title={isMonthly ? 'Remove from Monthly Customers [Space Bar]' : 'Add to Monthly Customers [Space Bar]'}
-            className={`inline-flex items-center justify-center w-6 h-6 rounded-md transition-all ${
-              isMonthly 
-                ? 'bg-teal-600 text-white shadow-2xs hover:bg-teal-700 ring-1 ring-teal-600 scale-105' 
-                : 'bg-slate-100 text-slate-400 border border-slate-300 hover:border-teal-400 hover:text-teal-600'
+            className={`p-1.5 rounded-lg transition-all ${
+              isTreeExpanded 
+                ? 'bg-teal-600 text-white shadow-2xs' 
+                : 'text-slate-400 hover:text-teal-700 hover:bg-slate-100'
             }`}
+            title={isTreeExpanded ? 'Collapse Tree Structure [T]' : 'Expand Patient Medicines Tree [T]'}
           >
-            {isMonthly ? (
-              <CheckSquare className="w-4 h-4" />
+            {isTreeExpanded ? (
+              <ChevronDown className="w-3.5 h-3.5" />
             ) : (
-              <Square className="w-4 h-4" />
+              <ChevronRight className="w-3.5 h-3.5" />
             )}
           </button>
-          {isFocused && (
-            <kbd className="hidden xl:inline-block px-1 py-0.5 rounded text-[9px] font-mono text-teal-800 bg-teal-100/90 border border-teal-300 shadow-2xs font-semibold uppercase">
-              Space
-            </kbd>
-          )}
-        </div>
-      </td>
-      <td className="py-3 px-5 font-bold text-slate-900">
-        <div>
-          <span>{cust.name}</span>
-          {cust.code && (
-            <span className="block text-[10px] text-slate-400 font-mono font-normal">
-              Code: {cust.code}
+        </td>
+
+        <td className="py-3 px-2 text-center font-mono font-medium text-xs">
+          <span className={isFocused ? 'text-teal-700 font-bold' : 'text-slate-400'}>
+            {index + 1}
+          </span>
+        </td>
+        <td 
+          className="py-3 px-3 text-center"
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleMonthly(cust.id, !isMonthly);
+          }}
+        >
+          <div className="inline-flex items-center gap-1.5 justify-center">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onToggleMonthly(cust.id, !isMonthly);
+              }}
+              title={isMonthly ? 'Remove from Monthly Customers [Space Bar]' : 'Add to Monthly Customers [Space Bar]'}
+              className={`inline-flex items-center justify-center w-6 h-6 rounded-md transition-all ${
+                isMonthly 
+                  ? 'bg-teal-600 text-white shadow-2xs hover:bg-teal-700 ring-1 ring-teal-600 scale-105' 
+                  : 'bg-slate-100 text-slate-400 border border-slate-300 hover:border-teal-400 hover:text-teal-600'
+              }`}
+            >
+              {isMonthly ? (
+                <CheckSquare className="w-4 h-4" />
+              ) : (
+                <Square className="w-4 h-4" />
+              )}
+            </button>
+            {isFocused && (
+              <kbd className="hidden xl:inline-block px-1 py-0.5 rounded text-[9px] font-mono text-teal-800 bg-teal-100/90 border border-teal-300 shadow-2xs font-semibold uppercase">
+                Space
+              </kbd>
+            )}
+          </div>
+        </td>
+        <td className="py-3 px-4 font-bold text-slate-900">
+          <div>
+            <span>{safeName}</span>
+            {cust.code && (
+              <span className="block text-[10px] text-slate-400 font-mono font-normal">
+                Code: {cust.code}
+              </span>
+            )}
+          </div>
+        </td>
+        <td className="py-3 px-3">
+          {isMonthly ? (
+            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-teal-50 text-teal-700 border border-teal-200">
+              Monthly Regular
+            </span>
+          ) : (
+            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-slate-100 text-slate-600">
+              New / Unticked
             </span>
           )}
-        </div>
-      </td>
-      <td className="py-3 px-4">
-        {isMonthly ? (
-          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-teal-50 text-teal-700 border border-teal-200">
-            Monthly Regular
+        </td>
+        <td className="py-3 px-3 font-mono text-slate-700">
+          {cust.phone || <span className="text-slate-400 italic">No Phone</span>}
+        </td>
+        <td className="py-3 px-3 font-bold text-slate-900 text-right">
+          ₹{safeSpend.toFixed(2)}
+        </td>
+        <td className="py-3 px-3 text-center text-slate-600">
+          <span className="inline-flex items-center gap-1 font-medium bg-slate-100 px-2 py-0.5 rounded-full text-[11px]">
+            <Pill className="w-3 h-3 text-teal-600" />
+            {safeMeds.length} med(s)
           </span>
-        ) : (
-          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-slate-100 text-slate-600">
-            New / Unticked
-          </span>
-        )}
-      </td>
-      <td className="py-3 px-4 font-mono text-slate-700">
-        {cust.phone || <span className="text-slate-400 italic">No Phone</span>}
-      </td>
-      <td className="py-3 px-4 font-bold text-slate-900 text-right">
-        ₹{cust.totalSpend.toFixed(2)}
-      </td>
-      <td className="py-3 px-4 text-center text-slate-600">
-        {cust.medicines.length} med(s)
-      </td>
-      <td className="py-3 px-4 text-center text-slate-600 font-mono">
-        {cust.monthsActive}m
-      </td>
-      <td className="py-3 px-4 text-center font-mono text-slate-500">
-        {cust.lastPurchaseDate}
-      </td>
-      <td 
-        className="py-3 px-5 text-right space-x-1"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <button
-          type="button"
-          onClick={() => onEdit(cust)}
-          title="Edit Customer & Medicines"
-          className="p-1.5 rounded-lg bg-slate-100 hover:bg-teal-50 hover:text-teal-700 text-slate-600 transition-colors inline-flex items-center"
+        </td>
+        <td className="py-3 px-2 text-center text-slate-600 font-mono">
+          {safeMonths}m
+        </td>
+        <td className="py-3 px-3 text-center font-mono text-slate-500">
+          {safeDate}
+        </td>
+        <td 
+          className="py-3 px-4 text-right space-x-1"
+          onClick={(e) => e.stopPropagation()}
         >
-          <Edit3 className="w-3.5 h-3.5" />
-        </button>
-        <button
-          type="button"
-          onClick={() => onSelect(cust)}
-          title="View Full Profile"
-          className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors inline-flex items-center"
-        >
-          <ChevronRight className="w-4 h-4" />
-        </button>
-      </td>
-    </tr>
+          <button
+            type="button"
+            onClick={onToggleTree}
+            title={isTreeExpanded ? 'Collapse Tree' : 'Expand Tree Hierarchy'}
+            className="p-1.5 rounded-lg bg-slate-100 hover:bg-teal-50 hover:text-teal-700 text-slate-600 transition-colors inline-flex items-center"
+          >
+            <FolderTree className="w-3.5 h-3.5" />
+          </button>
+          <button
+            type="button"
+            onClick={() => onEdit(cust)}
+            title="Edit Customer & Medicines"
+            className="p-1.5 rounded-lg bg-slate-100 hover:bg-teal-50 hover:text-teal-700 text-slate-600 transition-colors inline-flex items-center"
+          >
+            <Edit3 className="w-3.5 h-3.5" />
+          </button>
+          <button
+            type="button"
+            onClick={() => onSelect(cust)}
+            title="View Full Profile"
+            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors inline-flex items-center"
+          >
+            <ChevronRight className="w-4 h-4" />
+          </button>
+        </td>
+      </tr>
+
+      {/* Expandable Tree Structure Sub-Row */}
+      {isTreeExpanded && (
+        <tr className="bg-slate-50/90 border-b border-teal-200 animate-fadeIn">
+          <td colSpan={11} className="p-0">
+            <div className="py-3 px-6 pl-14 bg-gradient-to-r from-teal-50/50 via-slate-50 to-white border-l-4 border-teal-600 space-y-2.5">
+              {/* Level 1: Tree Node Meta */}
+              <div className="flex items-center justify-between flex-wrap gap-2 text-xs border-b border-slate-200/80 pb-2">
+                <div className="flex items-center gap-2">
+                  <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded font-mono font-bold text-teal-800 bg-teal-100/90 text-[11px]">
+                    <FolderTree className="w-3.5 h-3.5" />
+                    TREE STRUCTURE: {safeName}
+                  </span>
+                  <span className="text-slate-400">|</span>
+                  <span className="text-slate-600">
+                    Refill Due Date: <strong className="font-mono text-teal-900">{cust.nextDueDate || 'Not Calculated'}</strong>
+                  </span>
+                  <span className="text-slate-400">|</span>
+                  <span className="text-slate-600">
+                    Alert Window: <strong className="font-mono text-amber-700">{cust.alertDate || '5 Days Prior'}</strong>
+                  </span>
+                </div>
+                <div className="text-[11px] text-slate-500 font-medium">
+                  {safeMeds.length} Prescription Item(s) &bull; Total Spend: ₹{safeSpend.toFixed(2)}
+                </div>
+              </div>
+
+              {/* Level 2 & 3: Medicines Tree Branches */}
+              {safeMeds.length === 0 ? (
+                <p className="text-xs text-slate-400 italic py-1">
+                  No individual medicine records attached to this patient yet.
+                </p>
+              ) : (
+                <div className="space-y-1.5">
+                  {safeMeds.map((med, mIdx) => (
+                    <div 
+                      key={med.id || mIdx}
+                      className="flex items-center justify-between bg-white rounded-lg px-3 py-1.5 border border-slate-200 text-xs shadow-2xs hover:border-teal-300 transition-colors"
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-slate-400 text-[11px]">├─ [{mIdx + 1}]</span>
+                        <Pill className="w-3.5 h-3.5 text-teal-600 shrink-0" />
+                        <span className="font-semibold text-slate-800">{med.name}</span>
+                        {med.packaging && (
+                          <span className="text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.2 rounded font-mono">
+                            {med.packaging}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-4 text-[11px]">
+                        <span className="text-slate-500">
+                          Qty: <strong className="font-mono text-slate-700">{med.unit || med.qty || 1}</strong>
+                        </span>
+                        <span className="text-slate-500">
+                          Cycle: <strong className="font-mono text-slate-700">{med.refillCycleDays || 30} Days</strong>
+                        </span>
+                        <span className="font-bold text-teal-700 font-mono bg-teal-50 px-2 py-0.5 rounded border border-teal-100">
+                          ₹{(Number(med.amount) || 0).toFixed(2)}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </td>
+        </tr>
+      )}
+    </React.Fragment>
   );
 }, (prev, next) => {
   return (
     prev.isFocused === next.isFocused &&
     prev.isMonthly === next.isMonthly &&
+    prev.isTreeExpanded === next.isTreeExpanded &&
     prev.index === next.index &&
-    prev.cust.id === next.cust.id &&
-    prev.cust.name === next.cust.name &&
-    prev.cust.phone === next.cust.phone &&
-    prev.cust.totalSpend === next.cust.totalSpend &&
-    prev.cust.updatedAt === next.cust.updatedAt &&
-    prev.cust.medicines.length === next.cust.medicines.length &&
-    prev.cust.lastPurchaseDate === next.cust.lastPurchaseDate
+    prev.cust?.id === next.cust?.id &&
+    prev.cust?.name === next.cust?.name &&
+    prev.cust?.phone === next.cust?.phone &&
+    prev.cust?.totalSpend === next.cust?.totalSpend &&
+    prev.cust?.updatedAt === next.cust?.updatedAt &&
+    (prev.cust?.medicines || []).length === (next.cust?.medicines || []).length &&
+    prev.cust?.lastPurchaseDate === next.cust?.lastPurchaseDate
   );
 });
 
 CustomerTableRow.displayName = 'CustomerTableRow';
 
-// ================= MEMOIZED MOBILE CARD =================
+// ================= MEMOIZED MOBILE CARD WITH TREE STRUCTURE =================
 interface CustomerMobileCardProps {
   cust: Customer;
   index: number;
   isFocused: boolean;
   isMonthly: boolean;
+  isTreeExpanded: boolean;
+  onToggleTree: () => void;
   onSelect: (cust: Customer) => void;
   onToggleMonthly: (id: string, isMonthly: boolean) => void;
   onEdit: (cust: Customer) => void;
@@ -192,11 +321,19 @@ const CustomerMobileCard = React.memo<CustomerMobileCardProps>(({
   index,
   isFocused,
   isMonthly,
+  isTreeExpanded,
+  onToggleTree,
   onSelect,
   onToggleMonthly,
   onEdit,
   setRef,
 }) => {
+  const safeName = cust.name || 'Unknown Patient';
+  const safeSpend = Number(cust.totalSpend) || 0;
+  const safeMeds = Array.isArray(cust.medicines) ? cust.medicines : [];
+  const safeDate = cust.lastPurchaseDate || 'N/A';
+  const safeMonths = cust.monthsActive || 1;
+
   return (
     <div
       ref={setRef}
@@ -230,7 +367,7 @@ const CustomerMobileCard = React.memo<CustomerMobileCardProps>(({
           <div>
             <div className="flex items-center gap-2">
               <span className="text-xs font-mono text-slate-400 font-medium">#{index + 1}</span>
-              <span className="font-bold text-sm text-slate-900 leading-snug">{cust.name}</span>
+              <span className="font-bold text-sm text-slate-900 leading-snug">{safeName}</span>
             </div>
             {cust.code && (
               <span className="text-[10px] text-slate-400 font-mono block">Code: {cust.code}</span>
@@ -238,7 +375,22 @@ const CustomerMobileCard = React.memo<CustomerMobileCardProps>(({
           </div>
         </div>
 
-        <div>
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleTree();
+            }}
+            className={`px-2 py-0.5 rounded-full text-[10px] font-semibold flex items-center gap-1 border transition-colors ${
+              isTreeExpanded
+                ? 'bg-teal-600 text-white border-teal-600'
+                : 'bg-slate-100 text-slate-700 border-slate-200'
+            }`}
+          >
+            <FolderTree className="w-3 h-3" />
+            <span>Tree</span>
+          </button>
           {isMonthly ? (
             <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-teal-50 text-teal-700 border border-teal-200">
               Monthly
@@ -260,21 +412,44 @@ const CustomerMobileCard = React.memo<CustomerMobileCardProps>(({
         </div>
         <div>
           <span className="text-[10px] text-slate-400 block font-medium">Total Spend</span>
-          <span className="font-bold text-slate-900 text-[11px]">₹{cust.totalSpend.toFixed(2)}</span>
+          <span className="font-bold text-slate-900 text-[11px]">₹{safeSpend.toFixed(2)}</span>
         </div>
         <div>
           <span className="text-[10px] text-slate-400 block font-medium">Medicines</span>
-          <span className="text-slate-700 text-[11px] font-medium">{cust.medicines.length} med(s)</span>
+          <span className="text-slate-700 text-[11px] font-medium">{safeMeds.length} med(s)</span>
         </div>
         <div>
           <span className="text-[10px] text-slate-400 block font-medium">Latest Bill</span>
-          <span className="font-mono text-slate-600 text-[11px]">{cust.lastPurchaseDate}</span>
+          <span className="font-mono text-slate-600 text-[11px]">{safeDate}</span>
         </div>
       </div>
 
+      {/* Expandable Mobile Tree View */}
+      {isTreeExpanded && (
+        <div className="p-3 bg-teal-50/60 rounded-xl border border-teal-200 text-xs space-y-2 animate-fadeIn">
+          <div className="flex items-center justify-between text-[11px] font-bold text-teal-900 border-b border-teal-200/60 pb-1.5">
+            <span>Prescription Tree Hierarchy</span>
+            <span>Due: {cust.nextDueDate || 'N/A'}</span>
+          </div>
+          <div className="space-y-1">
+            {safeMeds.map((med, mIdx) => (
+              <div key={med.id || mIdx} className="bg-white p-2 rounded-lg border border-slate-200 text-[11px] flex justify-between items-center">
+                <div>
+                  <span className="font-semibold text-slate-800">{med.name}</span>
+                  {med.packaging && <span className="text-slate-400 ml-1">({med.packaging})</span>}
+                </div>
+                <div className="font-bold text-teal-700">
+                  ₹{(Number(med.amount) || 0).toFixed(2)}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div className="flex items-center justify-between pt-1">
         <span className="text-[11px] text-slate-400">
-          Active for {cust.monthsActive} month(s)
+          Active for {safeMonths} month(s)
         </span>
         <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
           <button
@@ -300,14 +475,15 @@ const CustomerMobileCard = React.memo<CustomerMobileCardProps>(({
   return (
     prev.isFocused === next.isFocused &&
     prev.isMonthly === next.isMonthly &&
+    prev.isTreeExpanded === next.isTreeExpanded &&
     prev.index === next.index &&
-    prev.cust.id === next.cust.id &&
-    prev.cust.name === next.cust.name &&
-    prev.cust.phone === next.cust.phone &&
-    prev.cust.totalSpend === next.cust.totalSpend &&
-    prev.cust.updatedAt === next.cust.updatedAt &&
-    prev.cust.medicines.length === next.cust.medicines.length &&
-    prev.cust.lastPurchaseDate === next.cust.lastPurchaseDate
+    prev.cust?.id === next.cust?.id &&
+    prev.cust?.name === next.cust?.name &&
+    prev.cust?.phone === next.cust?.phone &&
+    prev.cust?.totalSpend === next.cust?.totalSpend &&
+    prev.cust?.updatedAt === next.cust?.updatedAt &&
+    (prev.cust?.medicines || []).length === (next.cust?.medicines || []).length &&
+    prev.cust?.lastPurchaseDate === next.cust?.lastPurchaseDate
   );
 });
 
@@ -315,7 +491,7 @@ CustomerMobileCard.displayName = 'CustomerMobileCard';
 
 // ================= MAIN VIEW COMPONENT =================
 export const AllCustomersView: React.FC<AllCustomersViewProps> = ({
-  customers,
+  customers = [],
   onSelectCustomer,
   onToggleMonthly,
   onDeselectAllMonthly,
@@ -333,29 +509,41 @@ export const AllCustomersView: React.FC<AllCustomersViewProps> = ({
   // Instant optimistic state for spacebar toggles (<0.5ms UI response)
   const [optimisticMonthlyMap, setOptimisticMonthlyMap] = useState<Record<string, boolean>>({});
 
+  // Tree Structure expansion state
+  const [expandedTrees, setExpandedTrees] = useState<Record<string, boolean>>({});
+
   const rowRefs = useRef<(HTMLTableRowElement | null)[]>([]);
   const cardRefs = useRef<(HTMLDivElement | null)[]>([]);
 
-  // Memoized filter and sort
+  // Memoized filter and sort with 100% crash protection
   const filtered = useMemo(() => {
+    if (!Array.isArray(customers)) return [];
+
     return customers
       .filter((c) => {
+        if (!c) return false;
         if (typeFilter === 'MONTHLY_ONLY' && !c.isMonthlyRegular) return false;
         if (typeFilter === 'OCCASIONAL_ONLY' && c.isMonthlyRegular) return false;
 
         if (!searchTerm) return true;
         const term = searchTerm.toLowerCase();
+        const nameStr = (c.name || '').toLowerCase();
+        const phoneStr = c.phone || '';
+        const codeStr = c.code || '';
+        const meds = Array.isArray(c.medicines) ? c.medicines : [];
+        const medMatch = meds.some((m) => (m?.name || '').toLowerCase().includes(term));
         return (
-          c.name.toLowerCase().includes(term) ||
-          c.phone?.includes(term) ||
-          c.code?.includes(term) ||
-          c.medicines.some((m) => m.name.toLowerCase().includes(term))
+          nameStr.includes(term) ||
+          phoneStr.includes(term) ||
+          codeStr.includes(term) ||
+          medMatch
         );
       })
       .sort((a, b) => {
-        if (sortBy === 'name') return a.name.localeCompare(b.name);
-        if (sortBy === 'spend') return b.totalSpend - a.totalSpend;
-        return b.lastPurchaseDate.localeCompare(a.lastPurchaseDate);
+        if (!a || !b) return 0;
+        if (sortBy === 'name') return String(a.name || '').localeCompare(String(b.name || ''));
+        if (sortBy === 'spend') return (Number(b.totalSpend) || 0) - (Number(a.totalSpend) || 0);
+        return String(b.lastPurchaseDate || '').localeCompare(String(a.lastPurchaseDate || ''));
       });
   }, [customers, typeFilter, searchTerm, sortBy]);
 
@@ -404,6 +592,32 @@ export const AllCustomersView: React.FC<AllCustomersViewProps> = ({
 
   const optimisticMapRef = useRef(optimisticMonthlyMap);
   optimisticMapRef.current = optimisticMonthlyMap;
+
+  // Toggle tree structure for a customer
+  const handleToggleTree = useCallback((id: string) => {
+    setExpandedTrees(prev => ({
+      ...prev,
+      [id]: !prev[id],
+    }));
+  }, []);
+
+  // Expand / collapse all visible trees
+  const areAllTreesExpanded = useMemo(() => {
+    if (paginatedList.length === 0) return false;
+    return paginatedList.every(c => c && expandedTrees[c.id]);
+  }, [paginatedList, expandedTrees]);
+
+  const handleToggleAllTrees = useCallback(() => {
+    if (areAllTreesExpanded) {
+      setExpandedTrees({});
+    } else {
+      const nextMap: Record<string, boolean> = {};
+      paginatedListRef.current.forEach(c => {
+        if (c && c.id) nextMap[c.id] = true;
+      });
+      setExpandedTrees(nextMap);
+    }
+  }, [areAllTreesExpanded]);
 
   // Instant optimistic toggle handler (< 1ms UI response)
   const handleToggleMonthlyOptimistic = useCallback((customerId: string, nextIsMonthly: boolean) => {
@@ -479,8 +693,14 @@ export const AllCustomersView: React.FC<AllCustomersViewProps> = ({
         const currentCust = currentList[currentIdx];
         if (currentCust) {
           const optVal = optimisticMapRef.current[currentCust.id];
-          const isCurrentlyMonthly = optVal !== undefined ? optVal : currentCust.isMonthlyRegular;
+          const isCurrentlyMonthly = optVal !== undefined ? optVal : Boolean(currentCust.isMonthlyRegular);
           handleToggleMonthlyOptimistic(currentCust.id, !isCurrentlyMonthly);
+        }
+      } else if (e.key === 't' || e.key === 'T') {
+        e.preventDefault();
+        const currentCust = currentList[currentIdx];
+        if (currentCust) {
+          handleToggleTree(currentCust.id);
         }
       } else if (e.key === 'Enter') {
         e.preventDefault();
@@ -493,13 +713,14 @@ export const AllCustomersView: React.FC<AllCustomersViewProps> = ({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleToggleMonthlyOptimistic, pageSize]);
+  }, [handleToggleMonthlyOptimistic, handleToggleTree, pageSize]);
 
   // Overall index for display
   const globalFocusedIndex = (currentPage - 1) * effectivePageSize + focusedPageIdx + 1;
-  const monthlyCount = customers.filter(c => {
+  const monthlyCount = (customers || []).filter(c => {
+    if (!c) return false;
     const opt = optimisticMonthlyMap[c.id];
-    return opt !== undefined ? opt : c.isMonthlyRegular;
+    return opt !== undefined ? opt : Boolean(c.isMonthlyRegular);
   }).length;
 
   return (
@@ -515,18 +736,18 @@ export const AllCustomersView: React.FC<AllCustomersViewProps> = ({
               All Registered Customers Directory
             </h2>
             <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-800 border border-slate-200">
-              {customers.length} Total Patients
+              {(customers || []).length} Total Patients
             </span>
             <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-teal-50 text-teal-700 border border-teal-200">
               {monthlyCount} Monthly Active
             </span>
           </div>
           <p className="text-xs text-slate-500 mt-1 max-w-2xl leading-relaxed">
-            Master customer records extracted from your Marg ERP sales files. Use arrow keys and space bar to instantly triage monthly patients.
+            Master customer records from Firebase. Use arrow keys, space bar to triage monthly patients, and press <strong className="text-teal-700 font-mono">T</strong> to expand medicine tree structures.
           </p>
         </div>
 
-        {/* Filter Controls */}
+        {/* Filter & Tree Controls */}
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 flex-wrap">
           <div className="relative w-full sm:w-60">
             <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
@@ -544,9 +765,9 @@ export const AllCustomersView: React.FC<AllCustomersViewProps> = ({
               onChange={(e) => setTypeFilter(e.target.value as unknown as typeof typeFilter)}
               className="bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl text-xs font-medium text-slate-700 focus:border-teal-500 truncate"
             >
-              <option value="ALL">All ({customers.length})</option>
+              <option value="ALL">All ({(customers || []).length})</option>
               <option value="MONTHLY_ONLY">Monthly ({monthlyCount})</option>
-              <option value="OCCASIONAL_ONLY">Unticked ({customers.length - monthlyCount})</option>
+              <option value="OCCASIONAL_ONLY">Unticked ({(customers || []).length - monthlyCount})</option>
             </select>
             <select
               value={sortBy}
@@ -558,6 +779,22 @@ export const AllCustomersView: React.FC<AllCustomersViewProps> = ({
               <option value="name">Sort: Name A-Z</option>
             </select>
           </div>
+
+          {/* Toggle All Trees Button */}
+          <button
+            type="button"
+            onClick={handleToggleAllTrees}
+            className={`px-3 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-2xs cursor-pointer ${
+              areAllTreesExpanded
+                ? 'bg-teal-700 text-white hover:bg-teal-800'
+                : 'bg-teal-50 text-teal-800 hover:bg-teal-100 border border-teal-200'
+            }`}
+            title="Expand or collapse the prescription medicines tree for all visible customers"
+          >
+            <FolderTree className="w-3.5 h-3.5" />
+            <span>{areAllTreesExpanded ? 'Collapse All Trees' : 'Expand All Trees'}</span>
+          </button>
+
           {onDeselectAllMonthly && monthlyCount > 0 && (
             <button
               type="button"
@@ -586,12 +823,17 @@ export const AllCustomersView: React.FC<AllCustomersViewProps> = ({
           <span className="flex items-center gap-1">
             <kbd className="px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700 text-white font-mono text-[10px] shadow-xs">↑</kbd>
             <kbd className="px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700 text-white font-mono text-[10px] shadow-xs">↓</kbd>
-            <span className="text-slate-300">Navigate (Instant)</span>
+            <span className="text-slate-300">Navigate</span>
           </span>
           <span className="text-slate-600 hidden sm:inline">|</span>
           <span className="flex items-center gap-1">
             <kbd className="px-2 py-0.5 rounded bg-teal-500/20 border border-teal-500/40 text-teal-300 font-mono text-[10px] font-bold shadow-xs">Space Bar</kbd>
-            <span className="text-slate-300">Select / Remove Monthly</span>
+            <span className="text-slate-300">Track Monthly</span>
+          </span>
+          <span className="text-slate-600 hidden sm:inline">|</span>
+          <span className="flex items-center gap-1">
+            <kbd className="px-1.5 py-0.5 rounded bg-teal-500/20 border border-teal-500/40 text-teal-300 font-mono text-[10px] font-bold shadow-xs">T</kbd>
+            <span className="text-slate-300">Toggle Tree Structure</span>
           </span>
           <span className="text-slate-600 hidden sm:inline">|</span>
           <span className="flex items-center gap-1">
@@ -618,7 +860,7 @@ export const AllCustomersView: React.FC<AllCustomersViewProps> = ({
               No Customers Found
             </h3>
             <p className="text-xs text-slate-500 mt-1">
-              Upload your Marg ERP Excel files to import your pharmacy customers.
+              Upload your Marg ERP Excel files to import your pharmacy customers or verify Firebase connection.
             </p>
           </div>
         ) : (
@@ -628,24 +870,27 @@ export const AllCustomersView: React.FC<AllCustomersViewProps> = ({
               <table className="w-full text-left text-xs">
                 <thead className="bg-slate-50 text-slate-500 border-b border-slate-200 font-semibold uppercase text-[11px] tracking-wider">
                   <tr>
-                    <th className="py-3 px-3 w-12 text-center">#</th>
-                    <th className="py-3 px-3 text-center" title="Tick to include in Monthly Customers & Print List">Track Monthly</th>
-                    <th className="py-3 px-5">Patient Name</th>
-                    <th className="py-3 px-4">Category</th>
-                    <th className="py-3 px-4">Contact Phone</th>
-                    <th className="py-3 px-4 text-right">Total Spend</th>
-                    <th className="py-3 px-4 text-center">Medicines</th>
-                    <th className="py-3 px-4 text-center">Active</th>
-                    <th className="py-3 px-4 text-center">Latest Bill</th>
-                    <th className="py-3 px-5 text-right">Actions</th>
+                    <th className="py-3 px-2 w-8 text-center" title="Toggle Tree Structure">Tree</th>
+                    <th className="py-3 px-2 w-10 text-center">#</th>
+                    <th className="py-3 px-3 text-center" title="Tick to include in Monthly Customers">Track Monthly</th>
+                    <th className="py-3 px-4">Patient Name</th>
+                    <th className="py-3 px-3">Category</th>
+                    <th className="py-3 px-3">Contact Phone</th>
+                    <th className="py-3 px-3 text-right">Total Spend</th>
+                    <th className="py-3 px-3 text-center">Medicines</th>
+                    <th className="py-3 px-2 text-center">Active</th>
+                    <th className="py-3 px-3 text-center">Latest Bill</th>
+                    <th className="py-3 px-4 text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {paginatedList.map((cust, idx) => {
+                    if (!cust) return null;
                     const globalIdx = (currentPage - 1) * effectivePageSize + idx;
                     const optVal = optimisticMonthlyMap[cust.id];
-                    const isMonthly = optVal !== undefined ? optVal : cust.isMonthlyRegular;
+                    const isMonthly = optVal !== undefined ? optVal : Boolean(cust.isMonthlyRegular);
                     const isFocused = idx === focusedPageIdx;
+                    const isTreeExpanded = Boolean(expandedTrees[cust.id]);
 
                     return (
                       <CustomerTableRow
@@ -654,6 +899,8 @@ export const AllCustomersView: React.FC<AllCustomersViewProps> = ({
                         index={globalIdx}
                         isFocused={isFocused}
                         isMonthly={isMonthly}
+                        isTreeExpanded={isTreeExpanded}
+                        onToggleTree={() => handleToggleTree(cust.id)}
                         onSelect={onSelectCustomer}
                         onToggleMonthly={handleToggleMonthlyOptimistic}
                         onEdit={onEditCustomer}
@@ -668,10 +915,12 @@ export const AllCustomersView: React.FC<AllCustomersViewProps> = ({
             {/* Mobile / Tablet Cards */}
             <div className="lg:hidden divide-y divide-slate-100">
               {paginatedList.map((cust, idx) => {
+                if (!cust) return null;
                 const globalIdx = (currentPage - 1) * effectivePageSize + idx;
                 const optVal = optimisticMonthlyMap[cust.id];
-                const isMonthly = optVal !== undefined ? optVal : cust.isMonthlyRegular;
+                const isMonthly = optVal !== undefined ? optVal : Boolean(cust.isMonthlyRegular);
                 const isFocused = idx === focusedPageIdx;
+                const isTreeExpanded = Boolean(expandedTrees[cust.id]);
 
                 return (
                   <CustomerMobileCard
@@ -680,6 +929,8 @@ export const AllCustomersView: React.FC<AllCustomersViewProps> = ({
                     index={globalIdx}
                     isFocused={isFocused}
                     isMonthly={isMonthly}
+                    isTreeExpanded={isTreeExpanded}
+                    onToggleTree={() => handleToggleTree(cust.id)}
                     onSelect={onSelectCustomer}
                     onToggleMonthly={handleToggleMonthlyOptimistic}
                     onEdit={onEditCustomer}

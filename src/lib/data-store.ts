@@ -119,9 +119,9 @@ export const DEFAULT_SETTINGS: AppSettings = {
 };
 
 class DataStoreService {
-  private customers: Customer[] = [...SAMPLE_MERGED_CUSTOMERS];
-  private batches: UploadBatch[] = [...SAMPLE_BATCHES];
-  private reminders: ReminderItem[] = generateReminders(SAMPLE_MERGED_CUSTOMERS, DEFAULT_SETTINGS.alertDaysBefore);
+  private customers: Customer[] = [];
+  private batches: UploadBatch[] = [];
+  private reminders: ReminderItem[] = [];
   private settings: AppSettings = { ...DEFAULT_SETTINGS };
   private listeners: Set<() => void> = new Set();
   private isInitialized: boolean = false;
@@ -203,22 +203,7 @@ class DataStoreService {
       }
     }
 
-    // Auto-populate July & August Marg ERP dataset on first launch if empty AND never initialized before
-    const HAS_INITIALIZED_KEY = 'sarita_has_initialized_v2';
-    const hasInitialized = typeof window !== 'undefined' ? localStorage.getItem(HAS_INITIALIZED_KEY) : null;
-
-    if (!hasInitialized && this.customers.length === 0 && this.batches.length === 0) {
-      this.customers = deduplicateCustomerList(SAMPLE_MERGED_CUSTOMERS);
-      this.batches = SAMPLE_BATCHES;
-      this.persistLocalCustomers();
-      this.persistLocalBatches();
-      if (typeof window !== 'undefined') {
-        localStorage.setItem(HAS_INITIALIZED_KEY, 'true');
-      }
-    } else if (typeof window !== 'undefined') {
-      localStorage.setItem(HAS_INITIALIZED_KEY, 'true');
-    }
-
+    // Do not populate mock sample data; use real data from Firebase or uploaded sheets
     this.batches = this.enrichBatches(this.batches);
 
     this.recalculateReminders();
@@ -267,9 +252,9 @@ class DataStoreService {
       }
 
       if (remoteCustomers && remoteCustomers.length > 0) {
-        const { merged } = mergeRemoteCustomers(this.customers, remoteCustomers);
-        this.customers = merged;
-        this.persistLocalCustomers();
+        // Authoritative cloud data: ensure all real customers from Firebase are set without mock pollution
+        this.customers = deduplicateCustomerList(remoteCustomers);
+        this.persistLocalCustomers(true);
       }
 
       // Fetch dedicated monthly customers collection

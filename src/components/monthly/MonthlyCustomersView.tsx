@@ -41,9 +41,10 @@ export const MonthlyCustomersView: React.FC<MonthlyCustomersViewProps> = ({
   const [calendarCustomer, setCalendarCustomer] = useState<Customer | null>(null);
 
   // Filter only regular monthly customers
-  const monthlyCustomers = customers.filter((c) => c.isMonthlyRegular);
+  const monthlyCustomers = (customers || []).filter((c) => c && c.isMonthlyRegular);
 
   const filtered = monthlyCustomers.filter((c) => {
+    if (!c) return false;
     const days = getDaysRemaining(c.nextDueDate);
     if (statusFilter === 'DUE_SOON' && !(days >= 0 && days <= 5)) return false;
     if (statusFilter === 'OVERDUE' && !(days < 0)) return false;
@@ -51,10 +52,11 @@ export const MonthlyCustomersView: React.FC<MonthlyCustomersViewProps> = ({
 
     if (!searchTerm) return true;
     const term = searchTerm.toLowerCase();
-    const nameMatch = c.name.toLowerCase().includes(term);
+    const nameMatch = (c.name || '').toLowerCase().includes(term);
     const phoneMatch = c.phone?.includes(term);
-    const medMatch = c.medicines.some((m) => m.name.toLowerCase().includes(term));
-    return nameMatch || phoneMatch || medMatch;
+    const meds = Array.isArray(c.medicines) ? c.medicines : [];
+    const medMatch = meds.some((m) => (m?.name || '').toLowerCase().includes(term));
+    return Boolean(nameMatch || phoneMatch || medMatch);
   });
 
   // Sorting logic required by Point 2:

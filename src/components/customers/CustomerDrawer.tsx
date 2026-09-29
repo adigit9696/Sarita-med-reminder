@@ -160,11 +160,11 @@ export const CustomerDrawer: React.FC<CustomerDrawerProps> = ({
             <div className="flex items-center justify-between mb-2">
               <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
                 <Pill className="w-3.5 h-3.5 text-teal-600" />
-                <span>Prescription Medicines ({customer.medicines.length})</span>
+                <span>Prescription Medicines ({(customer.medicines || []).length})</span>
               </h3>
             </div>
             <div className="space-y-2">
-              {customer.medicines.map((med, idx) => (
+              {(customer.medicines || []).map((med, idx) => (
                 <div
                   key={med.id || idx}
                   className="p-3 rounded-xl border border-slate-200 bg-white hover:border-teal-300 transition-colors shadow-2xs"
@@ -181,7 +181,7 @@ export const CustomerDrawer: React.FC<CustomerDrawerProps> = ({
                       )}
                     </div>
                     <span className="text-xs font-bold text-teal-700 bg-teal-50 px-2 py-0.5 rounded border border-teal-100">
-                      ₹{med.amount.toFixed(2)}
+                      ₹{(Number(med.amount) || 0).toFixed(2)}
                     </span>
                   </div>
                   <div className="flex items-center justify-between text-[11px] text-slate-500 mt-2 pt-2 border-t border-slate-100">

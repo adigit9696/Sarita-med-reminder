@@ -22,7 +22,7 @@ import { SAMPLE_MERGED_CUSTOMERS, SAMPLE_BATCHES } from './sample-data';
 import { DEFAULT_WHATSAPP_TEMPLATE } from './whatsapp';
 import { audioAlerts } from './audio-alerts';
 import { deriveMonthInfo } from './marg-parser';
-import { getCustomersForBatch } from './monthly-comparator';
+import { getCustomersForBatch, computeMissingCustomers } from './monthly-comparator';
 
 /**
  * Merges remote customers from Firestore into the local customer array.
@@ -441,7 +441,11 @@ class DataStoreService {
   }
 
   public getMonthlyCustomers(): Customer[] {
-    return this.customers.filter(c => c.isMonthlyRegular);
+    return this.customers.filter(c => c.isMonthlyRegular && c.status === 'active');
+  }
+
+  public getMissingCustomersInfo(): { missingCustomerIds: Set<string>; previousMonthLabel: string } {
+    return computeMissingCustomers(this.batches, this.customers);
   }
 
   public getAllCustomers(): Customer[] {
@@ -497,7 +501,7 @@ class DataStoreService {
         const custOk = await syncCustomersToFirestore(this.customers);
         
         // Also sync any monthly customers if present
-        const monthlyCusts = this.customers.filter(c => c.isMonthlyRegular);
+        const monthlyCusts = this.getMonthlyCustomers();
         if (monthlyCusts.length > 0) {
           await syncAllMonthlyCustomersToFirestore(monthlyCusts);
         }
@@ -516,6 +520,10 @@ class DataStoreService {
       }
     } else {
       syncCustomersToFirestore(this.customers).catch(() => {});
+      const monthlyCusts = this.getMonthlyCustomers();
+      if (monthlyCusts.length > 0) {
+        syncAllMonthlyCustomersToFirestore(monthlyCusts).catch(() => {});
+      }
     }
   }
 
@@ -548,8 +556,11 @@ class DataStoreService {
     const cust = this.customers.find(c => c.id === customerId);
     if (!cust) return;
 
-    const actualCycle = cycleDays && cycleDays > 0 ? cycleDays : this.settings.defaultRefillCycleDays;
+    const actualCycle = cycleDays && cycleDays > 0 
+      ? cycleDays 
+      : (cust.refillCycleDays && cust.refillCycleDays > 0 ? cust.refillCycleDays : this.settings.defaultRefillCycleDays);
 
+    cust.refillCycleDays = actualCycle;
     cust.lastPurchaseDate = dispensedDate;
     cust.lastRefillDate = dispensedDate;
 
@@ -586,6 +597,9 @@ class DataStoreService {
     syncSingleCustomerToFirestore(cust).catch(() => {
       syncCustomersToFirestore(this.customers).catch(() => {});
     });
+    if (cust.isMonthlyRegular) {
+      syncMonthlyCustomerToFirestore(cust, true).catch(() => {});
+    }
   }
 
   private reminderRecalcTimer: ReturnType<typeof setTimeout> | null = null;
@@ -654,6 +668,33 @@ class DataStoreService {
       updatedCust.phoneNorm = digits.length >= 10 ? digits.slice(-10) : undefined;
     }
 
+    const cycle = updates.refillCycleDays;
+    if (cycle && cycle > 0) {
+      updatedCust.refillCycleDays = cycle;
+      const baseDate = updatedCust.lastPurchaseDate || updatedCust.lastRefillDate;
+      if (baseDate) {
+        const parts = baseDate.split('-').map(Number);
+        if (parts.length >= 3 && !isNaN(parts[0]) && !isNaN(parts[1]) && !isNaN(parts[2])) {
+          const dt = new Date(parts[0], parts[1] - 1, parts[2] + cycle);
+          const y = dt.getFullYear();
+          const m = String(dt.getMonth() + 1).padStart(2, '0');
+          const d = String(dt.getDate()).padStart(2, '0');
+          updatedCust.nextDueDate = `${y}-${m}-${d}`;
+
+          const alertDt = new Date(parts[0], parts[1] - 1, parts[2] + cycle - this.settings.alertDaysBefore);
+          const ay = alertDt.getFullYear();
+          const am = String(alertDt.getMonth() + 1).padStart(2, '0');
+          const ad = String(alertDt.getDate()).padStart(2, '0');
+          updatedCust.alertDate = `${ay}-${am}-${ad}`;
+        }
+      }
+      updatedCust.medicines.forEach(m => {
+        m.refillCycleDays = cycle;
+        if (updatedCust.lastPurchaseDate) m.lastPurchaseDate = updatedCust.lastPurchaseDate;
+        m.nextDueDate = updatedCust.nextDueDate;
+      });
+    }
+
     this.customers[custIndex] = updatedCust;
     this.persistLocalCustomers();
     this.recalculateReminders();
@@ -662,6 +703,9 @@ class DataStoreService {
     syncSingleCustomerToFirestore(updatedCust).catch(() => {
       syncCustomersToFirestore(this.customers).catch(() => {});
     });
+    if (updatedCust.isMonthlyRegular) {
+      syncMonthlyCustomerToFirestore(updatedCust, true).catch(() => {});
+    }
   }
 
   public deleteUploadBatch(batchId: string): boolean {

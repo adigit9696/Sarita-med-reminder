@@ -356,3 +356,110 @@ export function exportMissingCustomersCSV(
     alert('Failed to generate export file. Please try again.');
   }
 }
+
+export interface MissingCustomersResult {
+  missingCustomerIds: Set<string>;
+  previousMonthLabel: string;
+  hasComparison: boolean;
+}
+
+/**
+ * Computes the set of "missing" customers by comparing the latest committed month
+ * against the immediately previous committed month.
+ * Sorted chronologically by monthKey (e.g. 2026-07 -> 2026-08 -> 2026-09).
+ */
+export function computeMissingCustomers(
+  batches: UploadBatch[],
+  allCustomers: Customer[]
+): MissingCustomersResult {
+  const emptyResult: MissingCustomersResult = {
+    missingCustomerIds: new Set<string>(),
+    previousMonthLabel: '',
+    hasComparison: false,
+  };
+
+  if (!batches || !Array.isArray(batches) || batches.length === 0) {
+    return emptyResult;
+  }
+
+  // 1. Take committed batches (exclude rolled_back)
+  const committedBatches = batches.filter(b => b && b.status === 'committed');
+  if (committedBatches.length === 0) {
+    return emptyResult;
+  }
+
+  // 2. Group by monthKey (derive from periodEnd if missing; e.g. "2026-07")
+  const monthGroups = new Map<string, { monthName: string; customerIdSet: Set<string> }>();
+
+  committedBatches.forEach(b => {
+    const pEnd = String(b.periodEnd || '');
+    const mKey = String(b.monthKey || (pEnd ? pEnd.slice(0, 7) : '')).trim();
+    if (!mKey) return;
+
+    if (!monthGroups.has(mKey)) {
+      let mName = b.monthName;
+      if (!mName && mKey.length >= 7) {
+        const parts = mKey.split('-');
+        const y = parseInt(parts[0], 10);
+        const m = parseInt(parts[1], 10);
+        const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        mName = `${months[m - 1] || mKey} ${y}`;
+      }
+      monthGroups.set(mKey, {
+        monthName: mName || mKey,
+        customerIdSet: new Set<string>(),
+      });
+    }
+
+    const group = monthGroups.get(mKey)!;
+    const custsInBatch = getCustomersForBatch(b, allCustomers);
+    custsInBatch.forEach(c => {
+      if (c && c.id) group.customerIdSet.add(c.id);
+    });
+    if (Array.isArray(b.customerIds)) {
+      b.customerIds.forEach(id => {
+        if (id) group.customerIdSet.add(id);
+      });
+    }
+  });
+
+  // 3. Sort chronologically by monthKey
+  const sortedMonthKeys = Array.from(monthGroups.keys()).sort();
+
+  if (sortedMonthKeys.length < 2) {
+    return emptyResult;
+  }
+
+  const latestMonthKey = sortedMonthKeys[sortedMonthKeys.length - 1];
+  const previousMonthKey = sortedMonthKeys[sortedMonthKeys.length - 2];
+
+  const latestGroup = monthGroups.get(latestMonthKey)!;
+  const previousGroup = monthGroups.get(previousMonthKey)!;
+
+  let shortPrevName = previousGroup.monthName;
+  shortPrevName = shortPrevName
+    .replace('January', 'Jan')
+    .replace('February', 'Feb')
+    .replace('March', 'Mar')
+    .replace('April', 'Apr')
+    .replace('June', 'Jun')
+    .replace('July', 'Jul')
+    .replace('August', 'Aug')
+    .replace('September', 'Sep')
+    .replace('October', 'Oct')
+    .replace('November', 'Nov')
+    .replace('December', 'Dec');
+
+  const missingCustomerIds = new Set<string>();
+  previousGroup.customerIdSet.forEach(id => {
+    if (!latestGroup.customerIdSet.has(id)) {
+      missingCustomerIds.add(id);
+    }
+  });
+
+  return {
+    missingCustomerIds,
+    previousMonthLabel: shortPrevName,
+    hasComparison: true,
+  };
+}

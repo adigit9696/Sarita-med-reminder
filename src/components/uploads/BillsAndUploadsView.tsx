@@ -10,19 +10,25 @@ import {
   FileText, 
   Clock, 
   Users, 
-  Pill,
-  Trash2,
-  Sparkles,
-  Download,
-  FileDown
+  Pill, 
+  Trash2, 
+  Sparkles, 
+  Download, 
+  Folder, 
+  FolderUp, 
+  Calendar, 
+  Layers,
+  ArrowRight
 } from 'lucide-react';
-import type { Customer, UploadBatch, CustomerMatchReport } from '@/types';
+import type { Customer, UploadBatch } from '@/types';
 import { parseMargExcel, type ParsedMargBatch } from '@/lib/marg-parser';
-import { matchAndMergeCustomers } from '@/lib/customer-matcher';
+import { 
+  matchAndMergeChronologicalBatches, 
+  type ChronologicalBatchMergeResult 
+} from '@/lib/customer-matcher';
+import { scanFilesFromDropEvent, scanFilesFromInputEvent } from '@/lib/folder-scanner';
 import { audioAlerts } from '@/lib/audio-alerts';
 import { PinVerifyModal } from '@/components/lock/PinVerifyModal';
-import { MonthlyAuditDrawer } from './MonthlyAuditDrawer';
-import { dataStore } from '@/lib/data-store';
 
 interface BillsAndUploadsViewProps {
   existingCustomers: Customer[];
@@ -51,61 +57,87 @@ export const BillsAndUploadsView: React.FC<BillsAndUploadsViewProps> = ({
 }) => {
   const [isDragging, setIsDragging] = useState(false);
   const [parsing, setParsing] = useState(false);
-  const [isAuditDrawerOpen, setIsAuditDrawerOpen] = useState(false);
-  const [batchToDelete, setBatchToDelete] = useState<UploadBatch | null>(null);
-  const [previewData, setPreviewData] = useState<{
-    parsed: ParsedMargBatch;
-    matchReport: CustomerMatchReport;
-    mergedCustomers: Customer[];
-    matchedCount: number;
-    newCount: number;
+  const [parsingProgress, setParsingProgress] = useState<{
+    current: number;
+    total: number;
+    fileName: string;
   } | null>(null);
+  const [batchToDelete, setBatchToDelete] = useState<UploadBatch | null>(null);
+  const [previewData, setPreviewData] = useState<ChronologicalBatchMergeResult | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const folderInputRef = useRef<HTMLInputElement>(null);
 
-  const processFile = async (file: File) => {
+  const processFiles = async (files: File[], folderName?: string) => {
+    if (!files || files.length === 0) return;
     setParsing(true);
     setPreviewData(null);
+    setParsingProgress({ current: 0, total: files.length, fileName: files[0].name });
 
     try {
-      const buffer = await file.arrayBuffer();
-      const parsed = parseMargExcel(buffer, file.name, defaultRefillCycleDays, alertDaysBefore);
+      const parsedBatches: ParsedMargBatch[] = [];
 
-      // Perform matching against existing customers
-      const matchResult = matchAndMergeCustomers(
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        setParsingProgress({ current: i + 1, total: files.length, fileName: file.name });
+        try {
+          const buffer = await file.arrayBuffer();
+          const parsed = parseMargExcel(buffer, file.name, defaultRefillCycleDays, alertDaysBefore);
+          if (parsed && parsed.customers && parsed.customers.length > 0) {
+            parsedBatches.push(parsed);
+          }
+        } catch (fileErr) {
+          console.warn(`[BillsAndUploads] Skipping invalid or corrupt file ${file.name}:`, fileErr);
+        }
+      }
+
+      if (parsedBatches.length === 0) {
+        alert('No valid Marg customer sales records found in the selected file(s). Please verify they are valid Marg ERP exports.');
+        return;
+      }
+
+      // Merge sequentially in chronological order
+      const mergeResult = matchAndMergeChronologicalBatches(
         existingCustomers,
-        parsed.customers,
+        parsedBatches,
         defaultRefillCycleDays,
-        alertDaysBefore
+        alertDaysBefore,
+        folderName
       );
 
-      setPreviewData({
-        parsed,
-        matchReport: matchResult.report,
-        mergedCustomers: matchResult.updatedMasterCustomers,
-        matchedCount: matchResult.matchedMonthlyCount,
-        newCount: matchResult.newCustomersCount,
-      });
+      setPreviewData(mergeResult);
     } catch (err) {
-      console.error('Error processing Excel file:', err);
-      alert('Failed to parse file. Please verify it is a valid Marg ERP Excel or CSV file.');
+      console.error('Error processing Excel files:', err);
+      alert('Failed to process spreadsheet files. Please verify they are valid Marg ERP Excel or CSV files.');
     } finally {
       setParsing(false);
+      setParsingProgress(null);
     }
   };
 
-  const handleDrop = (e: React.DragEvent) => {
+  const handleDrop = async (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
-    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      processFile(e.dataTransfer.files[0]);
+    try {
+      const scanned = await scanFilesFromDropEvent(e);
+      if (scanned.files && scanned.files.length > 0) {
+        processFiles(scanned.files, scanned.folderName);
+      }
+    } catch (err) {
+      console.error('Error scanning dropped files/folder:', err);
     }
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files.length > 0) {
-      processFile(e.target.files[0]);
+    try {
+      const scanned = scanFilesFromInputEvent(e);
+      if (scanned.files && scanned.files.length > 0) {
+        processFiles(scanned.files, scanned.folderName);
+      }
+    } catch (err) {
+      console.error('Error selecting files:', err);
     }
+    e.target.value = '';
   };
 
   const downloadNewCustomersFile = (batch: UploadBatch, format: 'csv' | 'json' = 'csv') => {
@@ -115,7 +147,7 @@ export const BillsAndUploadsView: React.FC<BillsAndUploadsViewProps> = ({
       newCusts = existingCustomers.filter(c => batchCustIds.has(c.id));
     }
 
-    const cleanBaseName = batch.fileName.replace(/\.[^/.]+$/, '');
+    const cleanBaseName = batch.fileName.replace(/\.[^/.]+$/, '').replace(/[\s\(\)]+/g, '_');
 
     if (format === 'json') {
       const exportData = {
@@ -156,61 +188,45 @@ export const BillsAndUploadsView: React.FC<BillsAndUploadsViewProps> = ({
 
   const handleCommit = () => {
     if (!previewData) return;
-
-    // Accurately capture all master customer IDs included in this upload batch
-    const masterIds = [
-      ...previewData.matchReport.matchedMonthlyCustomers.map(m => m.existing.id),
-      ...previewData.matchReport.newCustomers.map(n => n.id)
-    ];
-
-    const newBatch: UploadBatch = {
-      id: 'batch_' + Date.now(),
-      fileName: previewData.parsed.fileName,
-      originalFileName: previewData.parsed.originalFileName,
-      monthName: previewData.parsed.monthName,
-      monthKey: previewData.parsed.monthKey,
-      fileSize: previewData.parsed.fileSize,
-      uploadDate: new Date().toISOString(),
-      periodStart: previewData.parsed.periodStart,
-      periodEnd: previewData.parsed.periodEnd,
-      formatType: previewData.parsed.formatType,
-      totalRows: previewData.parsed.totalRowsProcessed,
-      totalCustomers: previewData.parsed.customers.length,
-      newCustomersCount: previewData.newCount,
-      repeatCustomersCount: previewData.matchedCount,
-      status: 'committed',
-      customerIds: masterIds.length > 0 ? masterIds : previewData.parsed.customers.map((c) => c.id),
-      newCustomers: previewData.matchReport.newCustomers,
-    };
-
     audioAlerts.playSuccessChime();
-    onCommitBatch(previewData.mergedCustomers, newBatch);
+    onCommitBatch(previewData.updatedMasterCustomers, previewData.consolidatedBatch);
     setPreviewData(null);
   };
 
+  const isMultiFileBatch = Boolean(previewData && previewData.batchesProcessedCount > 1);
+
   return (
     <div className="space-y-6">
+      {/* Hidden File and Folder inputs */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        multiple
+        accept=".xls,.xlsx,.csv"
+        onChange={handleFileChange}
+        className="hidden"
+      />
+      <input
+        ref={folderInputRef}
+        type="file"
+        multiple
+        // @ts-expect-error webkitdirectory is standard for folder picker in chromium/firefox/safari
+        webkitdirectory=""
+        directory=""
+        onChange={handleFileChange}
+        className="hidden"
+      />
+
       {/* Upload Drop Zone Card */}
       <div className="bg-white border border-slate-200/80 rounded-2xl p-6 shadow-xs">
-        <div className="mb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div>
-            <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
-              <UploadCloud className="w-5 h-5 text-teal-600" />
-              <span>Upload Marg ERP Sales Files (.XLS / .XLSX / .CSV)</span>
-            </h2>
-            <p className="text-xs text-slate-500 mt-0.5">
-              All incoming customers are extracted into 'All Customers' master directory. Month is automatically tagged for accurate cross-referencing.
-            </p>
-          </div>
-
-          <button
-            type="button"
-            onClick={() => setIsAuditDrawerOpen(true)}
-            className="px-4 py-2 rounded-xl bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold shadow-2xs flex items-center gap-2 transition-all self-start sm:self-auto shrink-0 cursor-pointer"
-          >
-            <FileSpreadsheet className="w-4 h-4" />
-            <span>Monthly Audit & Missing Patients Drawer</span>
-          </button>
+        <div className="mb-4">
+          <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
+            <UploadCloud className="w-5 h-5 text-teal-600" />
+            <span>Upload Marg ERP Sales Files or Folder (.XLS / .XLSX / .CSV)</span>
+          </h2>
+          <p className="text-xs text-slate-500 mt-0.5">
+            Drop an entire folder of daily Marg sheets (e.g. "September"), or select multiple files. The app sorts them chronologically and sets each customer's actual latest purchase date.
+          </p>
         </div>
 
         <div
@@ -220,29 +236,61 @@ export const BillsAndUploadsView: React.FC<BillsAndUploadsViewProps> = ({
           }}
           onDragLeave={() => setIsDragging(false)}
           onDrop={handleDrop}
-          onClick={() => fileInputRef.current?.click()}
-          className={`border-2 border-dashed rounded-2xl p-8 text-center cursor-pointer transition-all ${
+          className={`border-2 border-dashed rounded-2xl p-8 text-center transition-all ${
             isDragging
               ? 'border-teal-500 bg-teal-50/60'
               : 'border-slate-200 hover:border-teal-400 bg-slate-50/60 hover:bg-slate-50'
           }`}
         >
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".xls,.xlsx,.csv"
-            onChange={handleFileChange}
-            className="hidden"
-          />
           <div className="w-12 h-12 rounded-2xl bg-teal-50 text-teal-600 flex items-center justify-center mx-auto mb-3">
-            <FileSpreadsheet className="w-6 h-6" />
+            <FolderUp className="w-6 h-6" />
           </div>
-          <p className="text-xs font-bold text-slate-800">
-            {parsing ? 'Parsing Excel File...' : 'Click to select or drag & drop Marg ERP Excel File'}
-          </p>
-          <p className="text-[11px] text-slate-500 mt-1">
-            Supports both Marg Grouped Summary Reports (e.g. jully26.XLS, aug26.XLS) and Tabular Sales Registers
-          </p>
+
+          {parsing && parsingProgress ? (
+            <div className="space-y-2 max-w-sm mx-auto">
+              <p className="text-xs font-bold text-teal-900">
+                Parsing file {parsingProgress.current} of {parsingProgress.total}...
+              </p>
+              <p className="text-[11px] text-slate-500 truncate font-mono">
+                {parsingProgress.fileName}
+              </p>
+              <div className="w-full bg-slate-200 rounded-full h-2 overflow-hidden">
+                <div 
+                  className="bg-teal-600 h-full transition-all duration-150"
+                  style={{ width: `${Math.round((parsingProgress.current / parsingProgress.total) * 100)}%` }}
+                />
+              </div>
+            </div>
+          ) : (
+            <>
+              <p className="text-sm font-bold text-slate-800">
+                Drop an entire Folder (e.g. "September") or daily Marg Excel files here
+              </p>
+              <p className="text-xs text-slate-500 mt-1 max-w-md mx-auto">
+                Supports single monthly summary sheets, multi-file daily sheets, and full monthly folders
+              </p>
+
+              <div className="flex items-center justify-center gap-3 mt-4 flex-wrap" onClick={(e) => e.stopPropagation()}>
+                <button
+                  type="button"
+                  onClick={() => folderInputRef.current?.click()}
+                  className="px-4 py-2 rounded-xl bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold shadow-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+                >
+                  <Folder className="w-4 h-4" />
+                  <span>Select Folder (Daily Sheets)</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="px-4 py-2 rounded-xl bg-white hover:bg-slate-100 text-slate-700 text-xs font-semibold border border-slate-300 shadow-2xs flex items-center gap-1.5 transition-colors cursor-pointer"
+                >
+                  <FileSpreadsheet className="w-4 h-4 text-teal-600" />
+                  <span>Select Files (Multi-Select)</span>
+                </button>
+              </div>
+            </>
+          )}
         </div>
       </div>
 
@@ -251,30 +299,36 @@ export const BillsAndUploadsView: React.FC<BillsAndUploadsViewProps> = ({
         <div className="bg-white border border-teal-200 rounded-2xl p-6 shadow-sm animate-fadeIn space-y-5">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
             <div>
-              <div className="flex items-center gap-2">
-                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-teal-100 text-teal-800 uppercase tracking-wide">
-                  {previewData.parsed.formatType === 'MARG_GROUPED_SUMMARY'
-                    ? 'Marg Grouped Patient Summary'
-                    : 'Tabular Sales Register'}
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-teal-100 text-teal-800 uppercase tracking-wide flex items-center gap-1">
+                  {isMultiFileBatch ? <Folder className="w-3 h-3" /> : <FileSpreadsheet className="w-3 h-3" />}
+                  <span>{isMultiFileBatch ? 'Multi-File Folder Batch' : 'Single Sales Summary'}</span>
                 </span>
-                <span className="text-xs font-bold text-slate-800">
-                  {previewData.parsed.fileName}
+                <span className="text-sm font-bold text-slate-800">
+                  {previewData.consolidatedBatch.fileName}
                 </span>
               </div>
-              <p className="text-xs text-slate-500 mt-1">
-                Sales Period: <span className="font-mono font-medium text-slate-700">{previewData.parsed.periodStart}</span> to <span className="font-mono font-medium text-slate-700">{previewData.parsed.periodEnd}</span>
+              <p className="text-xs text-slate-500 mt-1 flex items-center gap-2 flex-wrap">
+                <span>
+                  Date Range: <strong className="font-mono text-slate-700">{previewData.earliestDate}</strong> to <strong className="font-mono text-slate-700">{previewData.latestDate}</strong>
+                </span>
+                {isMultiFileBatch && (
+                  <span className="text-teal-700 font-medium">
+                    &bull; Chronologically sorted across {previewData.batchesProcessedCount} files
+                  </span>
+                )}
               </p>
             </div>
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setPreviewData(null)}
-                className="px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-100 text-xs font-medium"
+                className="px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-100 text-xs font-medium cursor-pointer"
               >
                 Discard
               </button>
               <button
                 onClick={handleCommit}
-                className="px-4 py-1.5 rounded-lg bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold shadow-xs flex items-center gap-1.5 transition-colors"
+                className="px-4 py-1.5 rounded-lg bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold shadow-xs flex items-center gap-1.5 transition-colors cursor-pointer"
               >
                 <CheckCircle2 className="w-4 h-4" />
                 <span>Commit & Add to Database</span>
@@ -285,67 +339,120 @@ export const BillsAndUploadsView: React.FC<BillsAndUploadsViewProps> = ({
           {/* Analysis Stats Grid */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
             <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200">
-              <span className="text-slate-500 text-[11px] font-medium">Total In File</span>
+              <span className="text-slate-500 text-[11px] font-medium block">
+                {isMultiFileBatch ? 'Files Processed' : 'Total Customers in File'}
+              </span>
               <p className="text-lg font-bold text-slate-900 mt-0.5">
-                {previewData.parsed.customers.length} Patients
+                {isMultiFileBatch ? `${previewData.batchesProcessedCount} Daily Sheets` : `${previewData.totalUniquePatients} Patients`}
               </p>
-              <p className="text-[10px] text-slate-500">{previewData.parsed.totalMedicinesCount} items parsed</p>
+              <p className="text-[10px] text-slate-500">
+                {isMultiFileBatch ? `${previewData.totalVisitsProcessed} total transactions` : 'Single report'}
+              </p>
             </div>
 
             <div className="p-3.5 rounded-xl bg-teal-50 border border-teal-200">
               <span className="text-teal-800 text-[11px] font-medium flex items-center gap-1">
                 <Sparkles className="w-3 h-3 text-teal-600" />
-                <span>Repeat Customers Matched</span>
+                <span>Repeat Patients Matched</span>
               </span>
               <p className="text-lg font-bold text-teal-900 mt-0.5">
-                {previewData.matchedCount} Customers
+                {previewData.matchedMonthlyCount} Customers
               </p>
-              <p className="text-[10px] text-teal-700 font-medium">Stored in All Customers (Manual Selection)</p>
+              <p className="text-[10px] text-teal-700 font-medium">Updated with exact latest bill dates</p>
             </div>
 
             <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200">
-              <span className="text-slate-500 text-[11px] font-medium">New Customers</span>
-              <p className="text-lg font-bold text-slate-900 mt-0.5">
-                {previewData.newCount} Patients
+              <span className="text-slate-500 text-[11px] font-medium block">New Patients</span>
+              <p className="text-lg font-bold text-emerald-700 mt-0.5">
+                +{previewData.newCustomersCount} Patients
               </p>
-              <p className="text-[10px] text-slate-500">Stored in All Customers Tab</p>
+              <p className="text-[10px] text-slate-500">Stored in All Customers tab</p>
             </div>
 
             <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200">
-              <span className="text-slate-500 text-[11px] font-medium">Post-Merge Master</span>
+              <span className="text-slate-500 text-[11px] font-medium block">Master Directory</span>
               <p className="text-lg font-bold text-slate-900 mt-0.5">
-                {previewData.mergedCustomers.length} Total Patients
+                {previewData.updatedMasterCustomers.length} Total Patients
               </p>
               <p className="text-[10px] text-slate-500">Zero duplicates created</p>
             </div>
           </div>
 
-          {/* Sample of matched repeat customers */}
-          {previewData.matchReport.matchedMonthlyCustomers.length > 0 && (
-            <div>
-              <h4 className="text-xs font-bold text-slate-800 mb-2">
-                Sample Repeat Monthly Customers Detected ({previewData.matchReport.matchedMonthlyCustomers.length}):
-              </h4>
-              <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
-                {previewData.matchReport.matchedMonthlyCustomers.slice(0, 10).map((m, idx) => (
-                  <div
-                    key={idx}
-                    className="p-2.5 rounded-lg bg-slate-50 border border-slate-200 text-xs flex items-center justify-between"
+          {/* Date Timeline Distribution (for multi-file / folder) */}
+          {isMultiFileBatch && previewData.allDetectedDates.length > 0 && (
+            <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200/80 space-y-2">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-bold text-slate-800 flex items-center gap-1.5">
+                  <Calendar className="w-3.5 h-3.5 text-teal-600" />
+                  <span>Daily Date Distribution ({previewData.allDetectedDates.length} distinct dates):</span>
+                </span>
+                <span className="text-[11px] text-slate-500">
+                  Patients categorized by their exact purchase date
+                </span>
+              </div>
+              <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto pr-1">
+                {previewData.allDetectedDates.map((date) => (
+                  <span
+                    key={date}
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white border border-slate-200 text-[11px] font-mono shadow-2xs"
                   >
-                    <div>
-                      <span className="font-semibold text-slate-900">{m.existing.name}</span>
-                      <span className="text-slate-500 ml-2 font-mono text-[11px]">
-                        {m.existing.phone || m.existing.code || 'Matched by ' + m.matchType}
-                      </span>
-                    </div>
-                    <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-teal-100 text-teal-800">
-                      Matched via {m.matchType.toUpperCase()}
-                    </span>
-                  </div>
+                    <span className="font-semibold text-slate-700">{date}:</span>
+                    <span className="text-teal-700 font-bold">{previewData.dateDistribution[date]} visits</span>
+                  </span>
                 ))}
               </div>
             </div>
           )}
+
+          {/* Sample of Patients with their Exact Detected Latest Bill Date */}
+          <div>
+            <h4 className="text-xs font-bold text-slate-800 mb-2 flex items-center justify-between">
+              <span>Sample Patients & Their Detected Latest Bill Date:</span>
+              <span className="text-[11px] font-normal text-slate-500">
+                Next refill dates calculated from these exact bill dates
+              </span>
+            </h4>
+            <div className="space-y-1.5 max-h-56 overflow-y-auto pr-1">
+              {previewData.updatedMasterCustomers.slice(0, 10).map((cust) => {
+                const source = previewData.patientLatestBillSource.get(cust.id);
+                return (
+                  <div
+                    key={cust.id}
+                    className="p-2.5 rounded-xl bg-slate-50 border border-slate-200 text-xs flex items-center justify-between gap-2"
+                  >
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-slate-900">{cust.name}</span>
+                        {cust.code && (
+                          <span className="text-[10px] text-slate-400 font-mono">Code: {cust.code}</span>
+                        )}
+                        {cust.isMonthlyRegular && (
+                          <span className="px-1.5 py-0.2 rounded text-[10px] font-semibold bg-teal-50 text-teal-700 border border-teal-200">
+                            Monthly
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[11px] text-slate-500 mt-0.5">
+                        {cust.medicines.length} medicine(s) &bull; Spend: ₹{cust.totalSpend.toFixed(2)}
+                      </p>
+                    </div>
+
+                    <div className="text-right shrink-0">
+                      <div className="inline-flex items-center gap-1 bg-white px-2 py-0.5 rounded-md border border-slate-200 font-mono text-[11px]">
+                        <span className="text-slate-500">Latest Bill:</span>
+                        <strong className="text-teal-800">{cust.lastPurchaseDate || '—'}</strong>
+                      </div>
+                      {source && (
+                        <span className="block text-[10px] text-slate-400 font-mono mt-0.5 truncate max-w-[200px]">
+                          from {source.fileName}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
         </div>
       )}
 
@@ -358,14 +465,14 @@ export const BillsAndUploadsView: React.FC<BillsAndUploadsViewProps> = ({
               <span>Upload Batch History</span>
             </h3>
             <p className="text-xs text-slate-500 mt-0.5">
-              Audit history of uploaded files. Each upload maintains a separate file of only newly added customers.
+              Audit history of uploaded files and daily folders. Each batch maintains an exportable file of only newly added customers.
             </p>
           </div>
         </div>
 
         {batches.length === 0 ? (
           <div className="p-8 text-center text-xs text-slate-400">
-            No files have been uploaded yet. Upload a Marg file above to start.
+            No files or folders have been uploaded yet. Upload a Marg file or folder above to start.
           </div>
         ) : (
           <>
@@ -374,7 +481,7 @@ export const BillsAndUploadsView: React.FC<BillsAndUploadsViewProps> = ({
               <table className="w-full text-left text-xs">
                 <thead className="bg-slate-50 text-slate-500 border-b border-slate-200 font-semibold uppercase text-[11px]">
                   <tr>
-                    <th className="py-3 px-5">File Name</th>
+                    <th className="py-3 px-5">Batch / Folder Name</th>
                     <th className="py-3 px-4">Sales Period</th>
                     <th className="py-3 px-4">Upload Timestamp</th>
                     <th className="py-3 px-4">Total Patients</th>
@@ -391,14 +498,25 @@ export const BillsAndUploadsView: React.FC<BillsAndUploadsViewProps> = ({
                       <tr key={b.id} className="hover:bg-slate-50 transition-colors">
                         <td className="py-3 px-5 font-bold text-slate-900">
                           <div className="flex items-center gap-2">
-                            <FileSpreadsheet className="w-4 h-4 text-teal-600 shrink-0" />
+                            {b.isFolderBatch ? (
+                              <Folder className="w-4 h-4 text-amber-500 shrink-0" />
+                            ) : (
+                              <FileSpreadsheet className="w-4 h-4 text-teal-600 shrink-0" />
+                            )}
                             <div>
                               <span className="block text-slate-900 font-bold">{b.fileName}</span>
-                              {b.monthName && (
-                                <span className="text-[10px] text-teal-800 font-semibold bg-teal-50 px-1.5 py-0.2 rounded border border-teal-200 inline-block mt-0.5">
-                                  {b.monthName}
-                                </span>
-                              )}
+                              <div className="flex items-center gap-1 mt-0.5 flex-wrap">
+                                {b.monthName && (
+                                  <span className="text-[10px] text-teal-800 font-semibold bg-teal-50 px-1.5 py-0.2 rounded border border-teal-200 inline-block">
+                                    {b.monthName}
+                                  </span>
+                                )}
+                                {b.filesCount && b.filesCount > 1 && (
+                                  <span className="text-[10px] text-amber-800 font-semibold bg-amber-50 px-1.5 py-0.2 rounded border border-amber-200 inline-block">
+                                    {b.filesCount} Files
+                                  </span>
+                                )}
+                              </div>
                             </div>
                           </div>
                         </td>
@@ -421,7 +539,7 @@ export const BillsAndUploadsView: React.FC<BillsAndUploadsViewProps> = ({
                                 type="button"
                                 onClick={() => downloadNewCustomersFile(b, 'csv')}
                                 title="Download separate CSV containing only new customers from this upload"
-                                className="px-2 py-0.5 rounded bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 text-[10px] font-semibold inline-flex items-center gap-1 transition-colors"
+                                className="px-2 py-0.5 rounded bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 text-[10px] font-semibold inline-flex items-center gap-1 transition-colors cursor-pointer"
                               >
                                 <Download className="w-2.5 h-2.5" />
                                 <span>CSV</span>
@@ -444,15 +562,6 @@ export const BillsAndUploadsView: React.FC<BillsAndUploadsViewProps> = ({
                           )}
                         </td>
                         <td className="py-3 px-5 text-right space-x-1.5 whitespace-nowrap">
-                          <button
-                            type="button"
-                            onClick={() => setIsAuditDrawerOpen(true)}
-                            title="Open monthly comparison drawer to cross-reference this sheet"
-                            className="px-2.5 py-1 rounded-lg bg-teal-50 hover:bg-teal-100 text-teal-700 text-xs font-semibold border border-teal-200 transition-colors inline-flex items-center gap-1"
-                          >
-                            <FileSpreadsheet className="w-3 h-3 text-teal-600" />
-                            <span>Audit Drawer</span>
-                          </button>
                           {b.status === 'committed' && (
                             <button
                               onClick={() => {
@@ -460,7 +569,7 @@ export const BillsAndUploadsView: React.FC<BillsAndUploadsViewProps> = ({
                                   onRollbackBatch(b.id);
                                 }
                               }}
-                              className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-medium border border-slate-200 transition-colors inline-flex items-center gap-1"
+                              className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-medium border border-slate-200 transition-colors inline-flex items-center gap-1 cursor-pointer"
                             >
                               <RotateCcw className="w-3 h-3" />
                               <span>Rollback</span>
@@ -469,7 +578,7 @@ export const BillsAndUploadsView: React.FC<BillsAndUploadsViewProps> = ({
                           <button
                             onClick={() => setBatchToDelete(b)}
                             title="Delete this uploaded bill permanently"
-                            className="px-2.5 py-1 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-semibold border border-rose-200 transition-colors inline-flex items-center gap-1"
+                            className="px-2.5 py-1 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-semibold border border-rose-200 transition-colors inline-flex items-center gap-1 cursor-pointer"
                           >
                             <Trash2 className="w-3 h-3 text-rose-600" />
                             <span>Delete Bill</span>
@@ -491,14 +600,25 @@ export const BillsAndUploadsView: React.FC<BillsAndUploadsViewProps> = ({
                     <div className="flex items-start justify-between gap-2">
                       <div>
                         <div className="flex items-center gap-1.5 font-bold text-slate-900 text-sm">
-                          <FileSpreadsheet className="w-4 h-4 text-teal-600 shrink-0" />
+                          {b.isFolderBatch ? (
+                            <Folder className="w-4 h-4 text-amber-500 shrink-0" />
+                          ) : (
+                            <FileSpreadsheet className="w-4 h-4 text-teal-600 shrink-0" />
+                          )}
                           <span>{b.fileName}</span>
                         </div>
-                        {b.monthName && (
-                          <span className="text-[10px] text-teal-800 font-semibold bg-teal-50 px-1.5 py-0.2 rounded border border-teal-200 inline-block mt-0.5">
-                            {b.monthName}
-                          </span>
-                        )}
+                        <div className="flex items-center gap-1 mt-0.5 flex-wrap">
+                          {b.monthName && (
+                            <span className="text-[10px] text-teal-800 font-semibold bg-teal-50 px-1.5 py-0.2 rounded border border-teal-200 inline-block">
+                              {b.monthName}
+                            </span>
+                          )}
+                          {b.filesCount && b.filesCount > 1 && (
+                            <span className="text-[10px] text-amber-800 font-semibold bg-amber-50 px-1.5 py-0.2 rounded border border-amber-200 inline-block">
+                              {b.filesCount} Files
+                            </span>
+                          )}
+                        </div>
                         <p className="text-[11px] text-slate-500 font-mono mt-0.5">
                           {b.periodStart} to {b.periodEnd}
                         </p>
@@ -534,7 +654,7 @@ export const BillsAndUploadsView: React.FC<BillsAndUploadsViewProps> = ({
                         <button
                           type="button"
                           onClick={() => downloadNewCustomersFile(b, 'csv')}
-                          className="px-2.5 py-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 text-xs font-medium inline-flex items-center gap-1.5 transition-colors"
+                          className="px-2.5 py-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 text-xs font-medium inline-flex items-center gap-1.5 transition-colors cursor-pointer"
                         >
                           <Download className="w-3.5 h-3.5" />
                           <span>New Customers (.csv)</span>
@@ -544,15 +664,6 @@ export const BillsAndUploadsView: React.FC<BillsAndUploadsViewProps> = ({
                       )}
 
                       <div className="flex items-center gap-1.5">
-                        <button
-                          type="button"
-                          onClick={() => setIsAuditDrawerOpen(true)}
-                          title="Open Monthly Audit Drawer"
-                          className="px-2 py-1.5 rounded-lg bg-teal-50 hover:bg-teal-100 text-teal-700 text-xs font-medium border border-teal-200 transition-colors inline-flex items-center gap-1"
-                        >
-                          <FileSpreadsheet className="w-3.5 h-3.5" />
-                          <span>Audit</span>
-                        </button>
                         {b.status === 'committed' && (
                           <button
                             onClick={() => {
@@ -560,7 +671,7 @@ export const BillsAndUploadsView: React.FC<BillsAndUploadsViewProps> = ({
                                 onRollbackBatch(b.id);
                               }
                             }}
-                            className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-medium border border-slate-200 transition-colors inline-flex items-center"
+                            className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-medium border border-slate-200 transition-colors inline-flex items-center cursor-pointer"
                             title="Rollback"
                           >
                             <RotateCcw className="w-3.5 h-3.5" />
@@ -569,7 +680,7 @@ export const BillsAndUploadsView: React.FC<BillsAndUploadsViewProps> = ({
                         <button
                           onClick={() => setBatchToDelete(b)}
                           title="Delete this uploaded bill permanently"
-                          className="px-2.5 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-semibold border border-rose-200 transition-colors inline-flex items-center gap-1"
+                          className="px-2.5 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-semibold border border-rose-200 transition-colors inline-flex items-center gap-1 cursor-pointer"
                         >
                           <Trash2 className="w-3.5 h-3.5 text-rose-600" />
                           <span>Delete</span>
@@ -584,7 +695,7 @@ export const BillsAndUploadsView: React.FC<BillsAndUploadsViewProps> = ({
         )}
       </div>
 
-      {/* PIN-Only Verification Modal for Deleting Bill (Sure text step removed) */}
+      {/* PIN Verification Modal for Deleting Bill */}
       <PinVerifyModal
         isOpen={!!batchToDelete}
         title="Delete Uploaded Bill File"
@@ -598,16 +709,6 @@ export const BillsAndUploadsView: React.FC<BillsAndUploadsViewProps> = ({
           }
         }}
         onCancel={() => setBatchToDelete(null)}
-      />
-
-      {/* Monthly Sheet Cross-Reference & Missing Patients Audit Drawer */}
-      <MonthlyAuditDrawer
-        isOpen={isAuditDrawerOpen}
-        onClose={() => setIsAuditDrawerOpen(false)}
-        batches={batches}
-        allCustomers={existingCustomers}
-        onToggleMonthly={onToggleMonthly || (() => {})}
-        onSelectCustomer={onSelectCustomer}
       />
     </div>
   );

@@ -186,14 +186,46 @@ export function parseMargExcel(
     if (text.includes('PATIENT/PRODUCT WISE SALES SUMMARY') || text.includes('SARITA PHARMACY')) {
       isGroupedReport = true;
     }
-    const dateMatch = text.match(/FROM\s+(\d{2}\/\d{2}\/\d{4})\s+TO\s+(\d{2}\/\d{2}\/\d{4})/i);
-    if (dateMatch) {
-      periodStart = parseDateToISO(dateMatch[1]);
-      periodEnd = parseDateToISO(dateMatch[2]);
+    const rangeMatch = text.match(/FROM\s+(\d{1,2}\/\d{1,2}\/\d{2,4})\s+TO\s+(\d{1,2}\/\d{1,2}\/\d{2,4})/i);
+    if (rangeMatch) {
+      periodStart = parseDateToISO(rangeMatch[1]);
+      periodEnd = parseDateToISO(rangeMatch[2]);
+      break;
+    }
+    const singleMatch = text.match(/(?:DATE|DT|AS ON|ON)\s*[:\-]?\s*(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4})/i);
+    if (singleMatch && !periodEnd) {
+      periodStart = parseDateToISO(singleMatch[1]);
+      periodEnd = periodStart;
     }
   }
 
-  // Fallback dates if not found in header
+  // Fallback 1: Extract date from fileName (e.g. 05-09-2026.xls, 05_09.xls, 2026-09-05.xlsx)
+  if (!periodEnd && fileName) {
+    const isoMatch = fileName.match(/(20\d{2})[\-_](\d{1,2})[\-_](\d{1,2})/);
+    if (isoMatch) {
+      const parsed = `${isoMatch[1]}-${isoMatch[2].padStart(2, '0')}-${isoMatch[3].padStart(2, '0')}`;
+      periodStart = parsed;
+      periodEnd = parsed;
+    } else {
+      const dmyMatch = fileName.match(/(\d{1,2})[\-_](\d{1,2})[\-_](20\d{2}|\d{2})/);
+      if (dmyMatch) {
+        const yr = dmyMatch[3].length === 2 ? `20${dmyMatch[3]}` : dmyMatch[3];
+        const parsed = `${yr}-${dmyMatch[2].padStart(2, '0')}-${dmyMatch[1].padStart(2, '0')}`;
+        periodStart = parsed;
+        periodEnd = parsed;
+      } else {
+        const dmMatch = fileName.match(/(\d{1,2})[\-_](\d{1,2})(?:\.|$)/);
+        if (dmMatch) {
+          const currentYear = new Date().getFullYear();
+          const parsed = `${currentYear}-${dmMatch[2].padStart(2, '0')}-${dmMatch[1].padStart(2, '0')}`;
+          periodStart = parsed;
+          periodEnd = parsed;
+        }
+      }
+    }
+  }
+
+  // Fallback 2: Default to today if date could not be determined
   const todayISO = new Date().toISOString().split('T')[0];
   if (!periodEnd) periodEnd = todayISO;
   if (!periodStart) {
@@ -251,10 +283,30 @@ function parseGroupedMargReport(
       continue;
     }
 
+    // Skip top headerless serial block (e.g. standalone "1" at top with unassigned sales)
+    if (s0 === '1' && r < 10) {
+      if (currentCust && currentMeds.length > 0) {
+        finalizeAndPushCustomer(customers, currentCust, currentMeds, periodEnd, defaultCycleDays, alertDaysBefore);
+      }
+      currentCust = null;
+      currentMeds = [];
+      continue;
+    }
+
+    // Skip CASH counter sale blocks (e.g. "121. .          CASH" or any line with CASH)
+    if (s0.toUpperCase().includes('CASH')) {
+      if (currentCust && currentMeds.length > 0) {
+        finalizeAndPushCustomer(customers, currentCust, currentMeds, periodEnd, defaultCycleDays, alertDaysBefore);
+      }
+      currentCust = null;
+      currentMeds = [];
+      continue;
+    }
+
     // Customer Header Matchers:
-    // Case 1: "84.  0006       NITI RANI KHESARI" or "456. 9936199660 MADHU PANDEY"
-    const custMatch = s0.match(/^(\d+)\.\s+(\d{3,10})\s+(.+)$/);
-    // Case 2: "12.  RAMESH KUMAR"
+    // Case 1: "84.  0006       NITI RANI KHESARI", "148. 2  DR.VARUN TRIPATHI", or "456. 9936199660 MADHU PANDEY"
+    const custMatch = s0.match(/^(\d+)\.\s+([A-Za-z0-9]{1,12})\s+(.+)$/);
+    // Case 2: "12.  RAMESH KUMAR" (name without code)
     const custMatchNoCode = s0.match(/^(\d+)\.\s+([A-Za-z].+)$/);
 
     if (custMatch || custMatchNoCode) {

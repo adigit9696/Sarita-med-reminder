@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { 
   CalendarClock, 
   Search, 
@@ -8,7 +8,7 @@ import {
   MessageSquare, 
   CheckCircle2, 
   Clock, 
-  AlertCircle,
+  AlertCircle, 
   ExternalLink,
   Pill,
   Sparkles,
@@ -20,6 +20,7 @@ import type { Customer } from '@/types';
 import { getDaysRemaining } from '@/lib/refill-calculator';
 import { formatWhatsAppReminderMessage, openWhatsAppChat } from '@/lib/whatsapp';
 import { DispenseCalendarModal } from '../modals/DispenseCalendarModal';
+import { dataStore } from '@/lib/data-store';
 
 interface MonthlyCustomersViewProps {
   customers: Customer[];
@@ -40,8 +41,13 @@ export const MonthlyCustomersView: React.FC<MonthlyCustomersViewProps> = ({
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'DUE_SOON' | 'OVERDUE' | 'COMPLETED'>('ALL');
   const [calendarCustomer, setCalendarCustomer] = useState<Customer | null>(null);
 
-  // Filter only regular monthly customers
-  const monthlyCustomers = (customers || []).filter((c) => c && c.isMonthlyRegular);
+  // Compute missing customers dynamically
+  const { missingCustomerIds, previousMonthLabel } = useMemo(() => {
+    return dataStore.getMissingCustomersInfo();
+  }, [customers]);
+
+  // Filter only regular monthly customers who are active
+  const monthlyCustomers = (customers || []).filter((c) => c && c.isMonthlyRegular && c.status === 'active');
 
   const filtered = monthlyCustomers.filter((c) => {
     if (!c) return false;
@@ -141,7 +147,7 @@ export const MonthlyCustomersView: React.FC<MonthlyCustomersViewProps> = ({
             </span>
           </div>
           <p className="text-xs text-slate-500 mt-1 max-w-2xl leading-relaxed">
-            These customers appear every month in Marg ERP sales reports. When marked "Refilled", their status marks Complete, their 30-day countdown begins, and they move to the bottom of the list. They automatically re-enter Alert Mode 5 days before their due date.
+            These are manually selected chronic patients tracked for monthly refills. Next refill date is calculated from their last bill date plus refill duration. When marked "Refilled", their countdown resets and they move to the bottom of the list.
           </p>
         </div>
 
@@ -195,11 +201,11 @@ export const MonthlyCustomersView: React.FC<MonthlyCustomersViewProps> = ({
                   <tr>
                     <th className="py-3.5 px-3 w-12 text-center">#</th>
                     <th className="py-3.5 px-5">Customer Name & Code</th>
-                    <th className="py-3.5 px-4">Contact Phone</th>
-                    <th className="py-3.5 px-4">Regular Medicines Prescribed</th>
-                    <th className="py-3.5 px-4">Refill Due Status</th>
-                    <th className="py-3.5 px-4">Last Refill / Bought</th>
-                    <th className="py-3.5 px-5 text-right">Actions</th>
+                    <th className="py-3.5 px-4">Contact Number</th>
+                    <th className="py-3.5 px-4">Regular Medications</th>
+                    <th className="py-3.5 px-4">Last Bill Date</th>
+                    <th className="py-3.5 px-4">Next Refill Date</th>
+                    <th className="py-3.5 px-5 text-right">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -208,29 +214,36 @@ export const MonthlyCustomersView: React.FC<MonthlyCustomersViewProps> = ({
                     const isOverdue = days < 0;
                     const isAlertMode = days >= 0 && days <= 5;
                     const isComplete = days > 5;
+                    const isMissing = missingCustomerIds.has(cust.id);
 
                     return (
                       <tr
                         key={cust.id}
                         onClick={() => onSelectCustomer(cust)}
-                        className={`hover:bg-slate-50/80 transition-colors cursor-pointer group ${
-                          isComplete ? 'bg-slate-50/40 opacity-90' : ''
+                        className={`transition-colors cursor-pointer group ${
+                          isMissing
+                            ? 'bg-rose-50/70 border-l-4 border-l-rose-500 hover:bg-rose-100/60'
+                            : isComplete
+                            ? 'bg-slate-50/40 opacity-90 hover:bg-slate-50/80'
+                            : 'hover:bg-slate-50/80'
                         }`}
                       >
                         <td className="py-3.5 px-3 text-center text-slate-400 font-mono font-medium text-xs">
                           {idx + 1}
                         </td>
                         <td className="py-3.5 px-5">
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 flex-wrap">
                             <span className="font-bold text-slate-900 text-xs">
                               {cust.name}
                             </span>
-                            <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-teal-50 text-teal-700 border border-teal-200">
-                              {cust.regularityScore}%
-                            </span>
+                            {isMissing && (
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-rose-100 text-rose-700 border border-rose-200">
+                                Missing since {previousMonthLabel || 'last month'}
+                              </span>
+                            )}
                           </div>
                           {cust.code && (
-                            <span className="text-[10px] text-slate-400 font-mono">
+                            <span className="text-[10px] text-slate-400 font-mono block">
                               Marg Code: {cust.code}
                             </span>
                           )}
@@ -260,6 +273,9 @@ export const MonthlyCustomersView: React.FC<MonthlyCustomersViewProps> = ({
                             )}
                           </div>
                         </td>
+                        <td className="py-3.5 px-4 font-mono text-slate-600">
+                          {cust.lastPurchaseDate || 'N/A'}
+                        </td>
                         <td 
                           className="py-3.5 px-4"
                           onClick={(e) => {
@@ -270,34 +286,30 @@ export const MonthlyCustomersView: React.FC<MonthlyCustomersViewProps> = ({
                           <button
                             type="button"
                             title="Click to select exact medication dispensed date in calendar"
-                            className="group/cal text-left transition-transform hover:scale-[1.02] focus:outline-none"
+                            className="group/cal text-left transition-transform hover:scale-[1.02] focus:outline-none flex flex-col sm:flex-row sm:items-center gap-1.5"
                           >
+                            <span className="font-mono font-bold text-slate-900 text-xs">
+                              {cust.nextDueDate || 'Not set'}
+                            </span>
                             {isOverdue ? (
-                              <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-rose-100 text-rose-800 border border-rose-200 hover:bg-rose-200 hover:border-rose-300 shadow-2xs">
-                                <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse"></span>
-                                <Calendar className="w-3.5 h-3.5 text-rose-700 group-hover/cal:scale-110 transition-transform" />
-                                <span>Overdue by {Math.abs(days)}d ({cust.nextDueDate})</span>
-                              </div>
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800 border border-rose-200 shadow-2xs">
+                                <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse"></span>
+                                Overdue {Math.abs(days)}d
+                              </span>
                             ) : isAlertMode ? (
-                              <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-900 border border-amber-200 hover:bg-amber-200 hover:border-amber-300 shadow-2xs animate-pulse-subtle">
-                                <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
-                                <Calendar className="w-3.5 h-3.5 text-amber-800 group-hover/cal:scale-110 transition-transform" />
-                                <span>Alert Mode: Due in {days}d ({cust.nextDueDate})</span>
-                              </div>
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-200 shadow-2xs animate-pulse-subtle">
+                                <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
+                                Due in {days}d
+                              </span>
                             ) : (
-                              <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200 hover:bg-emerald-100 hover:border-emerald-300 shadow-2xs">
-                                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                                <Calendar className="w-3.5 h-3.5 text-emerald-700 group-hover/cal:scale-110 transition-transform" />
-                                <span>Complete (Refill in {days}d · {cust.nextDueDate})</span>
-                              </div>
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 text-slate-600 border border-slate-200">
+                                In {days}d
+                              </span>
                             )}
                           </button>
                         </td>
-                        <td className="py-3.5 px-4 font-mono text-slate-500">
-                          {cust.lastRefillDate || cust.lastPurchaseDate}
-                        </td>
                         <td 
-                          className="py-3.5 px-5 text-right space-x-1.5"
+                          className="py-3.5 px-5 text-right space-x-1.5 whitespace-nowrap"
                           onClick={(e) => e.stopPropagation()}
                         >
                           <button
@@ -316,25 +328,14 @@ export const MonthlyCustomersView: React.FC<MonthlyCustomersViewProps> = ({
                           >
                             <MessageSquare className="w-3.5 h-3.5 text-emerald-600" />
                           </button>
-                          {isComplete ? (
-                            <button
-                              onClick={() => setCalendarCustomer(cust)}
-                              title="Refill Complete — Click to select medication dispensed date in calendar."
-                              className="px-2.5 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-300 font-medium text-xs shadow-2xs transition-colors inline-flex items-center gap-1"
-                            >
-                              <Calendar className="w-3.5 h-3.5 text-emerald-600" />
-                              <span>Complete</span>
-                            </button>
-                          ) : (
-                            <button
-                              onClick={() => setCalendarCustomer(cust)}
-                              title="Click to select exact medication dispensed date in calendar"
-                              className="px-2.5 py-1 rounded-lg bg-teal-600 hover:bg-teal-700 text-white font-medium text-xs shadow-2xs transition-colors inline-flex items-center gap-1"
-                            >
-                              <Calendar className="w-3.5 h-3.5" />
-                              <span>Refilled</span>
-                            </button>
-                          )}
+                          <button
+                            onClick={(e) => handleRefillClick(cust.id, e)}
+                            title="Mark Refilled Today"
+                            className="px-2.5 py-1 rounded-lg bg-teal-600 hover:bg-teal-700 text-white font-medium text-xs shadow-2xs transition-colors inline-flex items-center gap-1 cursor-pointer"
+                          >
+                            <CheckCircle2 className="w-3 h-3" />
+                            <span>Refilled</span>
+                          </button>
                         </td>
                       </tr>
                     );
@@ -350,23 +351,30 @@ export const MonthlyCustomersView: React.FC<MonthlyCustomersViewProps> = ({
                 const isOverdue = days < 0;
                 const isAlertMode = days >= 0 && days <= 5;
                 const isComplete = days > 5;
+                const isMissing = missingCustomerIds.has(cust.id);
 
                 return (
                   <div
                     key={cust.id}
                     onClick={() => onSelectCustomer(cust)}
-                    className={`p-4 hover:bg-slate-50/80 transition-colors cursor-pointer space-y-3 ${
-                      isComplete ? 'bg-slate-50/40 opacity-90' : ''
+                    className={`p-4 transition-colors cursor-pointer space-y-3 ${
+                      isMissing
+                        ? 'bg-rose-50/70 border-l-4 border-l-rose-500 hover:bg-rose-100/60'
+                        : isComplete 
+                        ? 'bg-slate-50/40 opacity-90 hover:bg-slate-50/80' 
+                        : 'hover:bg-slate-50/80'
                     }`}
                   >
                     <div className="flex items-start justify-between gap-2">
                       <div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
                           <span className="text-xs font-mono text-slate-400 font-medium">#{idx + 1}</span>
                           <span className="font-bold text-sm text-slate-900">{cust.name}</span>
-                          <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-teal-50 text-teal-700 border border-teal-200">
-                            {cust.regularityScore}%
-                          </span>
+                          {isMissing && (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-rose-100 text-rose-700 border border-rose-200">
+                              Missing since {previousMonthLabel || 'last month'}
+                            </span>
+                          )}
                         </div>
                         {cust.code && (
                           <span className="text-[10px] text-slate-400 font-mono block">Marg: {cust.code}</span>

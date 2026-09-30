@@ -25,6 +25,11 @@ export const EditCustomerModal: React.FC<EditCustomerModalProps> = ({
   const [code, setCode] = useState(customer.code || '');
   const [address, setAddress] = useState(customer.address || '');
   const [notes, setNotes] = useState(customer.notes || '');
+  const [refillCycleDays, setRefillCycleDays] = useState<number>(() => {
+    return customer.refillCycleDays && customer.refillCycleDays > 0
+      ? customer.refillCycleDays
+      : (customer.medicines?.[0]?.refillCycleDays || 30);
+  });
   const [medicines, setMedicines] = useState<CustomerMedicine[]>([...customer.medicines]);
 
   // New medicine row form
@@ -109,6 +114,7 @@ export const EditCustomerModal: React.FC<EditCustomerModalProps> = ({
       code: code.trim() || undefined,
       address: address.trim() || undefined,
       notes: notes.trim() || undefined,
+      refillCycleDays: refillCycleDays > 0 ? refillCycleDays : 30,
       medicines,
     });
     onClose();
@@ -124,7 +130,7 @@ export const EditCustomerModal: React.FC<EditCustomerModalProps> = ({
               Edit Patient & Prescription Information
             </h3>
             <p className="text-xs text-slate-500 mt-0.5">
-              Update contact number or add/remove prescribed chronic medications
+              Update contact number, refill duration, or add/remove prescribed chronic medications
             </p>
           </div>
           <button
@@ -185,8 +191,65 @@ export const EditCustomerModal: React.FC<EditCustomerModalProps> = ({
             </div>
           </div>
 
+          {/* Refill Duration (Staff Controlled) */}
+          <div className="p-3.5 rounded-xl bg-teal-50/60 border border-teal-200/80 space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="block text-xs font-bold text-slate-800">
+                Refill Duration (Reminder Cycle)
+              </label>
+              <span className="text-[11px] text-teal-700 font-semibold">
+                Sets default days until next refill
+              </span>
+            </div>
+
+            {/* Quick preset chips */}
+            <div className="grid grid-cols-4 gap-1.5">
+              {[
+                { label: '15 days', days: 15 },
+                { label: '1 month', days: 30 },
+                { label: '2 months', days: 60 },
+                { label: '3 months', days: 90 },
+              ].map((opt) => (
+                <button
+                  key={opt.days}
+                  type="button"
+                  onClick={() => setRefillCycleDays(opt.days)}
+                  className={`py-1.5 px-2 rounded-lg text-xs font-bold transition-all text-center border ${
+                    refillCycleDays === opt.days
+                      ? 'bg-teal-600 text-white border-teal-600 shadow-xs'
+                      : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Custom number of days */}
+            <div className="flex items-center gap-2 pt-0.5">
+              <span className="text-xs text-slate-500 font-medium whitespace-nowrap">Custom days:</span>
+              <div className="relative flex-1">
+                <input
+                  type="number"
+                  min={1}
+                  max={365}
+                  value={refillCycleDays || ''}
+                  onChange={(e) => {
+                    const val = parseInt(e.target.value);
+                    setRefillCycleDays(isNaN(val) ? 0 : val);
+                  }}
+                  className="w-full bg-white border border-slate-300 p-1.5 pr-14 rounded-lg text-slate-900 font-bold text-xs focus:outline-none focus:ring-2 focus:ring-teal-500 font-mono"
+                  placeholder="e.g. 15, 30, 45"
+                />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-slate-400 pointer-events-none">
+                  Days
+                </span>
+              </div>
+            </div>
+          </div>
+
           {/* Medicines Section */}
-          <div className="pt-4 border-t border-slate-200">
+          <div className="pt-2 border-t border-slate-200">
             <div className="flex items-center justify-between mb-3">
               <h4 className="font-bold text-xs text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
                 <Pill className="w-3.5 h-3.5 text-teal-600" />

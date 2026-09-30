@@ -31,6 +31,7 @@ export const DispenseCalendarModal: React.FC<DispenseCalendarModalProps> = ({
   const todayStr = getLocalToday();
   const [dispensedDate, setDispensedDate] = useState<string>(todayStr);
   const [cycleDays, setCycleDays] = useState<number>(() => {
+    if (customer?.refillCycleDays && customer.refillCycleDays > 0) return customer.refillCycleDays;
     const cDays = customer?.medicines?.[0]?.refillCycleDays;
     return cDays && cDays > 0 ? cDays : (defaultCycleDays || 30);
   });
@@ -38,8 +39,12 @@ export const DispenseCalendarModal: React.FC<DispenseCalendarModalProps> = ({
   useEffect(() => {
     if (isOpen) {
       setDispensedDate(getLocalToday());
-      const cDays = customer?.medicines?.[0]?.refillCycleDays;
-      setCycleDays(cDays && cDays > 0 ? cDays : (defaultCycleDays || 30));
+      if (customer?.refillCycleDays && customer.refillCycleDays > 0) {
+        setCycleDays(customer.refillCycleDays);
+      } else {
+        const cDays = customer?.medicines?.[0]?.refillCycleDays;
+        setCycleDays(cDays && cDays > 0 ? cDays : (defaultCycleDays || 30));
+      }
     }
   }, [isOpen, customer, defaultCycleDays]);
 
@@ -194,17 +199,43 @@ export const DispenseCalendarModal: React.FC<DispenseCalendarModalProps> = ({
             </div>
           </div>
 
-          {/* Chronic Refill Cycle (Days) Input */}
-          <div className="space-y-1.5 pt-1">
+          {/* Refill Duration (Staff Controlled) */}
+          <div className="space-y-2 pt-1">
             <div className="flex items-center justify-between">
               <label className="block text-xs font-bold text-slate-800">
-                Default Chronic Refill Cycle (Days):
+                Refill Duration:
               </label>
               <span className="text-[11px] text-teal-700 font-semibold">
-                Set custom cycle e.g. 15 or 17 days
+                Select duration or type custom days
               </span>
             </div>
-            <div className="flex items-center gap-2">
+            
+            {/* Quick preset chips */}
+            <div className="grid grid-cols-4 gap-1.5">
+              {[
+                { label: '15 days', days: 15 },
+                { label: '1 month', days: 30 },
+                { label: '2 months', days: 60 },
+                { label: '3 months', days: 90 },
+              ].map((opt) => (
+                <button
+                  key={opt.days}
+                  type="button"
+                  onClick={() => setCycleDays(opt.days)}
+                  className={`py-2 px-1 rounded-xl text-xs font-bold transition-all text-center border ${
+                    cycleDays === opt.days
+                      ? 'bg-teal-600 text-white border-teal-600 shadow-xs'
+                      : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Custom number of days */}
+            <div className="flex items-center gap-2 pt-0.5">
+              <span className="text-xs text-slate-500 font-medium whitespace-nowrap">Custom days:</span>
               <div className="relative flex-1">
                 <input
                   type="number"
@@ -216,28 +247,12 @@ export const DispenseCalendarModal: React.FC<DispenseCalendarModalProps> = ({
                     const val = parseInt(e.target.value);
                     setCycleDays(isNaN(val) ? 0 : val);
                   }}
-                  className="w-full bg-slate-50 border-2 border-teal-500/80 p-2.5 pr-14 rounded-xl text-slate-900 font-bold text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-teal-500 font-mono"
-                  placeholder="e.g. 15, 17, 30"
+                  className="w-full bg-slate-50 border border-slate-300 p-2 pr-14 rounded-xl text-slate-900 font-bold text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-teal-500 font-mono"
+                  placeholder="e.g. 15, 30, 45"
                 />
                 <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-slate-400 pointer-events-none">
                   Days
                 </span>
-              </div>
-              <div className="flex items-center gap-1 shrink-0">
-                {[15, 17, 21, 30, 60].map((preset) => (
-                  <button
-                    key={preset}
-                    type="button"
-                    onClick={() => setCycleDays(preset)}
-                    className={`px-2.5 py-2 rounded-xl text-xs font-bold transition-all ${
-                      cycleDays === preset
-                        ? 'bg-teal-600 text-white shadow-xs'
-                        : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                    }`}
-                  >
-                    {preset}d
-                  </button>
-                ))}
               </div>
             </div>
           </div>

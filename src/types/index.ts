@@ -45,6 +45,7 @@ export interface Customer {
   monthsActive: number;
   status: 'active' | 'inactive' | 'archived';
   medicines: CustomerMedicine[];
+  refillCycleDays?: number; // customer-level refill duration in days (default 30)
   history?: PurchaseRecord[];
   createdAt: string;
   updatedAt: string;
@@ -68,6 +69,10 @@ export interface UploadBatch {
   status: 'committed' | 'rolled_back';
   customerIds: string[];
   newCustomers?: Customer[];
+  isFolderBatch?: boolean;
+  folderName?: string;
+  filesCount?: number;
+  dailyFilesList?: string[];
 }
 
 export interface MissingCustomerAuditItem {

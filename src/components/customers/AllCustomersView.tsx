@@ -22,10 +22,13 @@ import {
   Calendar,
   Layers
 } from 'lucide-react';
-import type { Customer } from '@/types';
+import type { Customer, UploadBatch } from '@/types';
+import { computeMissingCustomers } from '@/lib/monthly-comparator';
+import { dataStore } from '@/lib/data-store';
 
 interface AllCustomersViewProps {
   customers: Customer[];
+  batches?: UploadBatch[];
   onSelectCustomer: (cust: Customer) => void;
   onToggleMonthly: (customerId: string, isMonthly: boolean) => void;
   onDeselectAllMonthly?: () => void;
@@ -38,6 +41,8 @@ interface CustomerTableRowProps {
   index: number;
   isFocused: boolean;
   isMonthly: boolean;
+  isMissing?: boolean;
+  previousMonthLabel?: string;
   isTreeExpanded: boolean;
   onToggleTree: () => void;
   onSelect: (cust: Customer) => void;
@@ -51,6 +56,8 @@ const CustomerTableRow = React.memo<CustomerTableRowProps>(({
   index,
   isFocused,
   isMonthly,
+  isMissing = false,
+  previousMonthLabel,
   isTreeExpanded,
   onToggleTree,
   onSelect,
@@ -70,7 +77,9 @@ const CustomerTableRow = React.memo<CustomerTableRowProps>(({
         ref={setRef}
         onClick={() => onSelect(cust)}
         className={`transition-colors cursor-pointer group select-none ${
-          isFocused 
+          isMissing
+            ? 'bg-rose-50/70 border-l-4 border-l-rose-500 hover:bg-rose-100/60'
+            : isFocused 
             ? 'bg-teal-50/95 ring-2 ring-inset ring-teal-500/90 shadow-2xs font-medium' 
             : isTreeExpanded
             ? 'bg-teal-50/30'
@@ -147,7 +156,14 @@ const CustomerTableRow = React.memo<CustomerTableRowProps>(({
         </td>
         <td className="py-3 px-4 font-bold text-slate-900">
           <div>
-            <span>{safeName}</span>
+            <div className="flex items-center gap-2 flex-wrap">
+              <span>{safeName}</span>
+              {isMissing && (
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-rose-100 text-rose-700 border border-rose-200">
+                  Missing since {previousMonthLabel || 'last month'}
+                </span>
+              )}
+            </div>
             {cust.code && (
               <span className="block text-[10px] text-slate-400 font-mono font-normal">
                 Code: {cust.code}
@@ -288,6 +304,8 @@ const CustomerTableRow = React.memo<CustomerTableRowProps>(({
   return (
     prev.isFocused === next.isFocused &&
     prev.isMonthly === next.isMonthly &&
+    prev.isMissing === next.isMissing &&
+    prev.previousMonthLabel === next.previousMonthLabel &&
     prev.isTreeExpanded === next.isTreeExpanded &&
     prev.index === next.index &&
     prev.cust?.id === next.cust?.id &&
@@ -308,6 +326,8 @@ interface CustomerMobileCardProps {
   index: number;
   isFocused: boolean;
   isMonthly: boolean;
+  isMissing?: boolean;
+  previousMonthLabel?: string;
   isTreeExpanded: boolean;
   onToggleTree: () => void;
   onSelect: (cust: Customer) => void;
@@ -321,6 +341,8 @@ const CustomerMobileCard = React.memo<CustomerMobileCardProps>(({
   index,
   isFocused,
   isMonthly,
+  isMissing = false,
+  previousMonthLabel,
   isTreeExpanded,
   onToggleTree,
   onSelect,
@@ -339,7 +361,11 @@ const CustomerMobileCard = React.memo<CustomerMobileCardProps>(({
       ref={setRef}
       onClick={() => onSelect(cust)}
       className={`p-4 transition-colors cursor-pointer space-y-3 ${
-        isFocused ? 'bg-teal-50/95 ring-2 ring-inset ring-teal-500' : 'hover:bg-slate-50/80'
+        isMissing
+          ? 'bg-rose-50/70 border-l-4 border-l-rose-500 hover:bg-rose-100/60'
+          : isFocused 
+          ? 'bg-teal-50/95 ring-2 ring-inset ring-teal-500' 
+          : 'hover:bg-slate-50/80'
       }`}
     >
       <div className="flex items-start justify-between gap-3">
@@ -365,9 +391,14 @@ const CustomerMobileCard = React.memo<CustomerMobileCardProps>(({
           </button>
 
           <div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <span className="text-xs font-mono text-slate-400 font-medium">#{index + 1}</span>
               <span className="font-bold text-sm text-slate-900 leading-snug">{safeName}</span>
+              {isMissing && (
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-rose-100 text-rose-700 border border-rose-200">
+                  Missing since {previousMonthLabel || 'last month'}
+                </span>
+              )}
             </div>
             {cust.code && (
               <span className="text-[10px] text-slate-400 font-mono block">Code: {cust.code}</span>
@@ -475,6 +506,8 @@ const CustomerMobileCard = React.memo<CustomerMobileCardProps>(({
   return (
     prev.isFocused === next.isFocused &&
     prev.isMonthly === next.isMonthly &&
+    prev.isMissing === next.isMissing &&
+    prev.previousMonthLabel === next.previousMonthLabel &&
     prev.isTreeExpanded === next.isTreeExpanded &&
     prev.index === next.index &&
     prev.cust?.id === next.cust?.id &&
@@ -492,15 +525,26 @@ CustomerMobileCard.displayName = 'CustomerMobileCard';
 // ================= MAIN VIEW COMPONENT =================
 export const AllCustomersView: React.FC<AllCustomersViewProps> = ({
   customers = [],
+  batches,
   onSelectCustomer,
   onToggleMonthly,
   onDeselectAllMonthly,
   onEditCustomer,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
-  const [typeFilter, setTypeFilter] = useState<'ALL' | 'MONTHLY_ONLY' | 'OCCASIONAL_ONLY'>('ALL');
+  const [typeFilter, setTypeFilter] = useState<'ALL' | 'MONTHLY_ONLY' | 'OCCASIONAL_ONLY' | 'MISSING_ONLY'>('ALL');
   const [sortBy, setSortBy] = useState<'name' | 'spend' | 'date'>('date');
   
+  // Compute missing customers dynamically from batches
+  const effectiveBatches = batches || dataStore.getBatches();
+  const { missingCustomerIds, previousMonthLabel, hasComparison } = useMemo(() => {
+    return computeMissingCustomers(effectiveBatches, customers);
+  }, [effectiveBatches, customers]);
+
+  const missingCount = useMemo(() => {
+    return (customers || []).filter(c => c && missingCustomerIds.has(c.id)).length;
+  }, [customers, missingCustomerIds]);
+
   // High-performance windowing: 50 items per page reduces DOM nodes by 90%
   const [pageSize, setPageSize] = useState<number>(50);
   const [currentPage, setCurrentPage] = useState<number>(1);
@@ -524,6 +568,7 @@ export const AllCustomersView: React.FC<AllCustomersViewProps> = ({
         if (!c) return false;
         if (typeFilter === 'MONTHLY_ONLY' && !c.isMonthlyRegular) return false;
         if (typeFilter === 'OCCASIONAL_ONLY' && c.isMonthlyRegular) return false;
+        if (typeFilter === 'MISSING_ONLY' && !missingCustomerIds.has(c.id)) return false;
 
         if (!searchTerm) return true;
         const term = searchTerm.toLowerCase();
@@ -545,7 +590,7 @@ export const AllCustomersView: React.FC<AllCustomersViewProps> = ({
         if (sortBy === 'spend') return (Number(b.totalSpend) || 0) - (Number(a.totalSpend) || 0);
         return String(b.lastPurchaseDate || '').localeCompare(String(a.lastPurchaseDate || ''));
       });
-  }, [customers, typeFilter, searchTerm, sortBy]);
+  }, [customers, typeFilter, searchTerm, sortBy, missingCustomerIds]);
 
   // Total pages
   const effectivePageSize = pageSize === 0 ? Math.max(1, filtered.length) : pageSize;
@@ -619,14 +664,21 @@ export const AllCustomersView: React.FC<AllCustomersViewProps> = ({
     }
   }, [areAllTreesExpanded]);
 
-  // Instant optimistic toggle handler (< 1ms UI response)
+  // Instant optimistic toggle handler with confirmation on removal
   const handleToggleMonthlyOptimistic = useCallback((customerId: string, nextIsMonthly: boolean) => {
+    if (!nextIsMonthly) {
+      const targetCust = customers.find(c => c.id === customerId);
+      const custName = targetCust?.name || 'this customer';
+      const confirmed = window.confirm(`Remove ${custName} from Monthly Customers?`);
+      if (!confirmed) return;
+    }
+
     setOptimisticMonthlyMap(prev => ({
       ...prev,
       [customerId]: nextIsMonthly,
     }));
     onToggleMonthlyRef.current(customerId, nextIsMonthly);
-  }, []);
+  }, [customers]);
 
   // Global Zero-Lag Keyboard Navigator
   useEffect(() => {
@@ -768,7 +820,24 @@ export const AllCustomersView: React.FC<AllCustomersViewProps> = ({
               <option value="ALL">All ({(customers || []).length})</option>
               <option value="MONTHLY_ONLY">Monthly ({monthlyCount})</option>
               <option value="OCCASIONAL_ONLY">Unticked ({(customers || []).length - monthlyCount})</option>
+              {hasComparison && (
+                <option value="MISSING_ONLY">Missing ({missingCount})</option>
+              )}
             </select>
+            {hasComparison && (
+              <button
+                type="button"
+                onClick={() => setTypeFilter(typeFilter === 'MISSING_ONLY' ? 'ALL' : 'MISSING_ONLY')}
+                className={`px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors shadow-2xs border cursor-pointer ${
+                  typeFilter === 'MISSING_ONLY'
+                    ? 'bg-rose-600 text-white border-rose-600'
+                    : 'bg-rose-50 text-rose-700 hover:bg-rose-100 border-rose-200'
+                }`}
+                title="List only customers missing since previous month"
+              >
+                <span>Missing ({missingCount})</span>
+              </button>
+            )}
             <select
               value={sortBy}
               onChange={(e) => setSortBy(e.target.value as unknown as typeof sortBy)}
@@ -899,6 +968,8 @@ export const AllCustomersView: React.FC<AllCustomersViewProps> = ({
                         index={globalIdx}
                         isFocused={isFocused}
                         isMonthly={isMonthly}
+                        isMissing={missingCustomerIds.has(cust.id)}
+                        previousMonthLabel={previousMonthLabel}
                         isTreeExpanded={isTreeExpanded}
                         onToggleTree={() => handleToggleTree(cust.id)}
                         onSelect={onSelectCustomer}
@@ -929,6 +1000,8 @@ export const AllCustomersView: React.FC<AllCustomersViewProps> = ({
                     index={globalIdx}
                     isFocused={isFocused}
                     isMonthly={isMonthly}
+                    isMissing={missingCustomerIds.has(cust.id)}
+                    previousMonthLabel={previousMonthLabel}
                     isTreeExpanded={isTreeExpanded}
                     onToggleTree={() => handleToggleTree(cust.id)}
                     onSelect={onSelectCustomer}

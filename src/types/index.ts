@@ -153,6 +153,14 @@ export interface AppSettings {
   emailProviderApiKey?: string;
   emailSenderAddress?: string;
   lastOwnerEmailAlertSentAt?: string;
+  lastOwnerEmailAlertStatus?: string;
+}
+
+export interface DataStateDoc {
+  epoch: string;
+  resetAt: string;
+  resetBy?: string;
+  mode?: 'ALL' | 'KEEP_MONTHLY';
 }
 
 export interface CustomerMatchReport {

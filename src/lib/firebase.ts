@@ -6,15 +6,15 @@ import {
   setDoc, 
   getDocs, 
   getDoc,
-  deleteDoc,
+  getDocsFromServer,
+  getDocFromServer,
+  deleteDoc, 
   writeBatch, 
   onSnapshot,
   type Unsubscribe,
-  query, 
-  limit, 
   type Firestore 
 } from 'firebase/firestore';
-import type { Customer, UploadBatch, AppSettings } from '@/types';
+import type { Customer, UploadBatch, AppSettings, DataStateDoc } from '@/types';
 
 export interface FirebaseConfigObject {
   apiKey: string;
@@ -115,6 +115,7 @@ export async function testFirebaseConnection(config: FirebaseConfigObject): Prom
       status: 'connected',
       timestamp: new Date().toISOString()
     });
+    console.log('[Firestore Write] caller=testFirebaseConnection, collection=health_check, doc=connection_test');
     return { success: true, message: 'Successfully connected and verified read/write access with Firebase Firestore!' };
   } catch (err: unknown) {
     const errorMsg = err instanceof Error ? err.message : String(err);
@@ -122,13 +123,23 @@ export async function testFirebaseConnection(config: FirebaseConfigObject): Prom
   }
 }
 
-// ================= Firestore Sync Methods =================
+// ================= Firestore Sync Options & Guard =================
+
+export interface SyncCustomersOptions {
+  caller?: string;
+  isUploadCommit?: boolean;
+  isRestore?: boolean;
+  isResetTool?: boolean;
+}
 
 /**
- * Saves all customer records permanently into the dedicated 'all_customers' collection in Firestore.
- * Automatically deduplicates by sanitized customer ID and writes in safe batches of 25 documents.
+ * Saves customer records into the 'all_customers' collection in Firestore.
+ * Strictly guarded: Any call attempting > 10 docs without explicit authorization is aborted.
  */
-export async function syncCustomersToFirestore(customers: Customer[]): Promise<boolean> {
+export async function syncCustomersToFirestore(
+  customers: Customer[], 
+  options: SyncCustomersOptions = {}
+): Promise<boolean> {
   const db = getFirebaseDb();
   if (!db) {
     console.warn('Cannot sync customers: Firestore DB not initialized');
@@ -139,8 +150,17 @@ export async function syncCustomersToFirestore(customers: Customer[]): Promise<b
     return true;
   }
 
+  const caller = options.caller || 'unknown';
+  const isAuthorizedBulk = options.isUploadCommit || options.isRestore || options.isResetTool;
+
+  // Requirement 3.1 #8: Unexpected-bulk-write guard (> 10 customers)
+  if (customers.length > 10 && !isAuthorizedBulk) {
+    const errorMsg = `[Firestore Safety Guard] BLOCKED unauthorized bulk write of ${customers.length} customers by caller '${caller}'.`;
+    console.error(errorMsg);
+    throw new Error(errorMsg);
+  }
+
   try {
-    // 1. Deduplicate by unique document ID and ensure customer has valid name
     const uniqueMap = new Map<string, Customer>();
     customers.forEach(cust => {
       if (!cust || !cust.name) return;
@@ -149,8 +169,10 @@ export async function syncCustomersToFirestore(customers: Customer[]): Promise<b
     });
 
     const uniqueCustomers = Array.from(uniqueMap.values());
-    const chunkSize = 25; // Safe chunk size preventing Firestore batch payload limit overflows
+    // Requirement 3.1 #10: Log secret-free write line in development
+    console.log(`[Firestore Write] caller=${caller}, collection=all_customers, docCount=${uniqueCustomers.length}`);
 
+    const chunkSize = 25;
     for (let i = 0; i < uniqueCustomers.length; i += chunkSize) {
       const chunk = uniqueCustomers.slice(i, i + chunkSize);
       const batch = writeBatch(db);
@@ -167,24 +189,9 @@ export async function syncCustomersToFirestore(customers: Customer[]): Promise<b
         batch.set(allCustRef, payload, { merge: true });
       });
 
-      try {
-        await batch.commit();
-      } catch (batchErr) {
-        console.warn(`[Firebase] Batch chunk ${i} commit notice, writing individual records:`, batchErr);
-        // Fallback: write each customer individually so no customer is dropped
-        for (const cust of chunk) {
-          try {
-            const cleanCust = JSON.parse(JSON.stringify(cust));
-            const payload = { ...cleanCust, id: cust.id, syncedAt: new Date().toISOString() };
-            await setDoc(doc(db, 'all_customers', cust.id), payload, { merge: true });
-          } catch (singleErr) {
-            console.error(`[Firebase] Error saving customer ${cust.id}:`, singleErr);
-          }
-        }
-      }
+      await batch.commit();
     }
 
-    console.log(`[Firebase] Successfully synced ${uniqueCustomers.length} master customers to 'all_customers' collection in Firestore!`);
     return true;
   } catch (err) {
     console.error('[Firebase] Error syncing customers to Firestore:', err);
@@ -192,7 +199,10 @@ export async function syncCustomersToFirestore(customers: Customer[]): Promise<b
   }
 }
 
-export async function syncSingleCustomerToFirestore(customer: Customer): Promise<boolean> {
+export async function syncSingleCustomerToFirestore(
+  customer: Customer, 
+  caller: string = 'single_update'
+): Promise<boolean> {
   const db = getFirebaseDb();
   if (!db || !customer || !customer.id) return false;
 
@@ -205,6 +215,7 @@ export async function syncSingleCustomerToFirestore(customer: Customer): Promise
       syncedAt: new Date().toISOString(),
     };
 
+    console.log(`[Firestore Write] caller=${caller}, collection=all_customers, docId=${docId}, docCount=1`);
     await setDoc(doc(db, 'all_customers', docId), payload, { merge: true });
     return true;
   } catch (err) {
@@ -215,12 +226,13 @@ export async function syncSingleCustomerToFirestore(customer: Customer): Promise
 
 /**
  * Dedicated Firestore Collection for "Monthly Customers":
- * When staff selects a customer in "All Customers", they are saved directly into 'monthly_customers'.
- * When deselected, they are removed from 'monthly_customers' while remaining permanently in 'all_customers'.
+ * When staff selects a customer, they are saved directly into 'monthly_customers'.
+ * When deselected, they are removed from 'monthly_customers' while remaining in 'all_customers'.
  */
 export async function syncMonthlyCustomerToFirestore(
   customer: Customer, 
-  isMonthly: boolean
+  isMonthly: boolean,
+  caller: string = 'monthly_toggle'
 ): Promise<boolean> {
   const db = getFirebaseDb();
   if (!db || !customer || !customer.id) return false;
@@ -232,7 +244,8 @@ export async function syncMonthlyCustomerToFirestore(
     const masterDocRef = doc(db, 'all_customers', docId);
 
     if (isMonthly) {
-      // 1. Save full record directly into dedicated monthly_customers collection
+      console.log(`[Firestore Write] caller=${caller}, collection=monthly_customers, docId=${docId}, action=add, docCount=1`);
+      // 1. Save record into dedicated monthly_customers collection
       await setDoc(monthlyDocRef, {
         ...cleanCust,
         id: docId,
@@ -249,89 +262,31 @@ export async function syncMonthlyCustomerToFirestore(
         updatedAt: new Date().toISOString(),
       }, { merge: true });
     } else {
-      // 1. Delete from dedicated monthly_customers collection
+      console.log(`[Firestore Write] caller=${caller}, collection=monthly_customers, docId=${docId}, action=remove, docCount=1`);
+      // Remove from dedicated monthly_customers collection
       await deleteDoc(monthlyDocRef);
 
-      // 2. Mark isMonthlyRegular: false on permanent all_customers master record
+      // Keep in all_customers but mark isMonthlyRegular: false
       await setDoc(masterDocRef, {
         isMonthlyRegular: false,
         updatedAt: new Date().toISOString(),
       }, { merge: true });
     }
 
-    console.log(`[Firebase] Successfully updated monthly status for ${customer.name || docId} -> isMonthly: ${isMonthly}`);
     return true;
   } catch (err) {
-    console.error(`[Firebase] Error syncing monthly customer ${customer.id} to Firestore:`, err);
+    console.error(`[Firebase] Error syncing monthly customer ${customer.id}:`, err);
     return false;
   }
 }
 
-export async function fetchMonthlyCustomersFromFirestore(): Promise<Customer[] | null> {
-  const db = getFirebaseDb();
-  if (!db) return null;
-
-  try {
-    const snapshot = await getDocs(collection(db, 'monthly_customers'));
-    const list: Customer[] = [];
-    snapshot.forEach(docSnap => {
-      const data = docSnap.data() as Customer;
-      if (data && data.name) {
-        list.push(data);
-      }
-    });
-    return list;
-  } catch (err) {
-    console.warn('[Firebase] Note fetching monthly_customers collection:', err);
-    return null;
-  }
-}
-
-export async function syncAllMonthlyCustomersToFirestore(monthlyCustomers: Customer[]): Promise<boolean> {
-  const db = getFirebaseDb();
-  if (!db || !Array.isArray(monthlyCustomers)) return false;
-
-  try {
-    const uniqueMap = new Map<string, Customer>();
-    monthlyCustomers.forEach(cust => {
-      if (!cust || !cust.name) return;
-      const safeId = String(cust.id || '').replace(/[\/\s]/g, '_');
-      uniqueMap.set(safeId, { ...cust, id: safeId, isMonthlyRegular: true });
-    });
-
-    const list = Array.from(uniqueMap.values());
-    const chunkSize = 25;
-
-    for (let i = 0; i < list.length; i += chunkSize) {
-      const chunk = list.slice(i, i + chunkSize);
-      const batch = writeBatch(db);
-
-      chunk.forEach(cust => {
-        const monthlyDocRef = doc(db, 'monthly_customers', cust.id);
-        const cleanCust = JSON.parse(JSON.stringify(cust));
-        batch.set(monthlyDocRef, {
-          ...cleanCust,
-          isMonthlyRegular: true,
-          syncedAt: new Date().toISOString(),
-        }, { merge: true });
-      });
-
-      await batch.commit();
-    }
-    console.log(`[Firebase] Successfully synced ${list.length} monthly customers to 'monthly_customers' collection`);
-    return true;
-  } catch (err) {
-    console.error('[Firebase] Error syncing all monthly customers to Firestore:', err);
-    return false;
-  }
-}
-
-export async function clearAllMonthlyCustomersFromFirestore(): Promise<boolean> {
+export async function clearAllMonthlyCustomersFromFirestore(caller: string = 'deselect_all_monthly'): Promise<boolean> {
   const db = getFirebaseDb();
   if (!db) return false;
 
   try {
-    const snapshot = await getDocs(collection(db, 'monthly_customers'));
+    const snapshot = await getDocsFromServer(collection(db, 'monthly_customers'));
+    console.log(`[Firestore Write] caller=${caller}, collection=monthly_customers, docCount=${snapshot.size} (clear)`);
     const batch = writeBatch(db);
     snapshot.forEach(docSnap => {
       batch.delete(docSnap.ref);
@@ -344,88 +299,57 @@ export async function clearAllMonthlyCustomersFromFirestore(): Promise<boolean> 
   }
 }
 
-export async function fetchCustomersFromFirestore(): Promise<Customer[] | null> {
+// ================= Server-Confirmed Read Methods =================
+
+export async function fetchCustomersFromFirestore(fromServer = true): Promise<Customer[] | null> {
   const db = getFirebaseDb();
   if (!db) return null;
 
   try {
-    let snapshot = await getDocs(collection(db, 'all_customers'));
-    if (snapshot.empty) {
-      snapshot = await getDocs(collection(db, 'customers'));
-    }
-
+    const colRef = collection(db, 'all_customers');
+    const snapshot = fromServer ? await getDocsFromServer(colRef) : await getDocs(colRef);
     const list: Customer[] = [];
     snapshot.forEach(docSnap => {
       const data = docSnap.data() as Customer;
-      // Strict data integrity: only accept documents with a valid patient name
       if (data && data.name && data.id) {
         list.push(data);
       }
     });
     return list;
   } catch (err) {
-    console.error('[Firebase] Error fetching customers from Firestore:', err);
+    console.warn('[Firebase] Warning reading all_customers from server:', err);
     return null;
   }
 }
 
-/**
- * Saves upload batches permanently into the dedicated 'all_uploads' collection in Firestore.
- */
-export async function syncBatchesToFirestore(batches: UploadBatch[]): Promise<boolean> {
-  const db = getFirebaseDb();
-  if (!db) return false;
-
-  try {
-    for (const b of batches) {
-      if (!b || !b.id) continue;
-      const docRef = doc(db, 'all_uploads', b.id);
-      const cleanBatch = JSON.parse(JSON.stringify(b));
-      await setDoc(docRef, {
-        ...cleanBatch,
-        syncedAt: new Date().toISOString(),
-      }, { merge: true });
-    }
-    return true;
-  } catch (err) {
-    console.error('[Firebase] Error syncing batches to all_uploads in Firestore:', err);
-    return false;
-  }
-}
-
-/**
- * Saves a single upload batch into the 'all_uploads' collection in Firestore.
- */
-export async function saveSingleBatchToFirestore(batch: UploadBatch): Promise<boolean> {
-  const db = getFirebaseDb();
-  if (!db || !batch || !batch.id) return false;
-
-  try {
-    const docRef = doc(db, 'all_uploads', batch.id);
-    const cleanBatch = JSON.parse(JSON.stringify(batch));
-    await setDoc(docRef, {
-      ...cleanBatch,
-      syncedAt: new Date().toISOString(),
-    }, { merge: true });
-
-    console.log(`[Firebase] Successfully saved upload batch ${batch.id} (${batch.fileName}) to 'all_uploads' in Firestore`);
-    return true;
-  } catch (err) {
-    console.error(`[Firebase] Error saving batch ${batch.id} to all_uploads in Firestore:`, err);
-    return false;
-  }
-}
-
-export async function fetchBatchesFromFirestore(): Promise<UploadBatch[] | null> {
+export async function fetchMonthlyCustomersFromFirestore(fromServer = true): Promise<Customer[] | null> {
   const db = getFirebaseDb();
   if (!db) return null;
 
   try {
-    let snapshot = await getDocs(collection(db, 'all_uploads'));
-    if (snapshot.empty) {
-      snapshot = await getDocs(collection(db, 'upload_batches'));
-    }
+    const colRef = collection(db, 'monthly_customers');
+    const snapshot = fromServer ? await getDocsFromServer(colRef) : await getDocs(colRef);
+    const list: Customer[] = [];
+    snapshot.forEach(docSnap => {
+      const data = docSnap.data() as Customer;
+      if (data && data.name) {
+        list.push(data);
+      }
+    });
+    return list;
+  } catch (err) {
+    console.warn('[Firebase] Warning reading monthly_customers from server:', err);
+    return null;
+  }
+}
 
+export async function fetchBatchesFromFirestore(fromServer = true): Promise<UploadBatch[] | null> {
+  const db = getFirebaseDb();
+  if (!db) return null;
+
+  try {
+    const colRef = collection(db, 'all_uploads');
+    const snapshot = fromServer ? await getDocsFromServer(colRef) : await getDocs(colRef);
     const list: UploadBatch[] = [];
     snapshot.forEach(docSnap => {
       const data = docSnap.data() as UploadBatch;
@@ -435,20 +359,38 @@ export async function fetchBatchesFromFirestore(): Promise<UploadBatch[] | null>
     });
     return list;
   } catch (err) {
-    console.error('[Firebase] Error fetching upload batches from Firestore:', err);
+    console.warn('[Firebase] Warning reading all_uploads from server:', err);
     return null;
   }
 }
 
-export async function deleteBatchFromFirestore(batchId: string): Promise<boolean> {
+export async function saveSingleBatchToFirestore(batch: UploadBatch, caller: string = 'upload_commit'): Promise<boolean> {
+  const db = getFirebaseDb();
+  if (!db || !batch || !batch.id) return false;
+
+  try {
+    const docRef = doc(db, 'all_uploads', batch.id);
+    const cleanBatch = JSON.parse(JSON.stringify(batch));
+    console.log(`[Firestore Write] caller=${caller}, collection=all_uploads, docId=${batch.id}, docCount=1`);
+    await setDoc(docRef, {
+      ...cleanBatch,
+      syncedAt: new Date().toISOString(),
+    }, { merge: true });
+
+    return true;
+  } catch (err) {
+    console.error(`[Firebase] Error saving batch ${batch.id} to all_uploads in Firestore:`, err);
+    return false;
+  }
+}
+
+export async function deleteBatchFromFirestore(batchId: string, caller: string = 'delete_batch'): Promise<boolean> {
   const db = getFirebaseDb();
   if (!db) return false;
 
   try {
+    console.log(`[Firestore Write] caller=${caller}, collection=all_uploads, docId=${batchId}, docCount=1 (delete)`);
     await deleteDoc(doc(db, 'all_uploads', batchId));
-    try {
-      await deleteDoc(doc(db, 'upload_batches', batchId));
-    } catch {}
     return true;
   } catch (err) {
     console.error('[Firebase] Error deleting batch from all_uploads in Firestore:', err);
@@ -456,10 +398,179 @@ export async function deleteBatchFromFirestore(batchId: string): Promise<boolean
   }
 }
 
-/**
- * Real-time listener for Firestore: all_customers, monthly_customers, and all_uploads collections.
- * Automatically synchronizes changes and updates immediately across all devices.
- */
+export async function syncBatchesToFirestore(
+  batches: UploadBatch[],
+  caller: string = 'restore_backup'
+): Promise<boolean> {
+  const db = getFirebaseDb();
+  if (!db || !Array.isArray(batches) || batches.length === 0) return true;
+
+  try {
+    console.log(`[Firestore Write] caller=${caller}, collection=all_uploads, docCount=${batches.length}`);
+    const batchWriter = writeBatch(db);
+    batches.forEach(b => {
+      if (b && b.id) {
+        const cleanBatch = JSON.parse(JSON.stringify(b));
+        batchWriter.set(doc(db, 'all_uploads', b.id), {
+          ...cleanBatch,
+          syncedAt: new Date().toISOString(),
+        }, { merge: true });
+      }
+    });
+    await batchWriter.commit();
+    return true;
+  } catch (err) {
+    console.error('[Firebase] Error syncing batches to all_uploads:', err);
+    return false;
+  }
+}
+
+// ================= Stale-Device Epoch & Data State =================
+
+export async function fetchDataStateFromFirestore(): Promise<DataStateDoc | null> {
+  const db = getFirebaseDb();
+  if (!db) return null;
+  try {
+    const snap = await getDocFromServer(doc(db, 'settings', 'data_state'));
+    if (snap.exists()) {
+      return snap.data() as DataStateDoc;
+    }
+    return null;
+  } catch (err) {
+    console.warn('[Firebase] Note reading settings/data_state from server:', err);
+    return null;
+  }
+}
+
+export async function initOrGetCloudDataState(): Promise<DataStateDoc | null> {
+  const db = getFirebaseDb();
+  if (!db) return null;
+  try {
+    const existing = await fetchDataStateFromFirestore();
+    if (existing && existing.epoch) {
+      return existing;
+    }
+    const newEpoch = 'epoch_' + Date.now() + '_' + Math.random().toString(36).slice(2, 10);
+    const newState: DataStateDoc = {
+      epoch: newEpoch,
+      resetAt: new Date().toISOString(),
+    };
+    await setDoc(doc(db, 'settings', 'data_state'), newState);
+    console.log(`[Firestore Write] caller=init_data_state, collection=settings, doc=data_state, epoch=${newEpoch}`);
+    return newState;
+  } catch (err) {
+    console.warn('[Firebase] Error initializing data_state:', err);
+    return null;
+  }
+}
+
+// ================= Controlled Safe Reset Engine =================
+
+export async function executeServerSideReset(mode: 'ALL' | 'KEEP_MONTHLY'): Promise<{
+  success: boolean;
+  deletedCustomers: number;
+  deletedBatches: number;
+  keptMonthly: number;
+  newEpoch: string;
+  error?: string;
+}> {
+  const db = getFirebaseDb();
+  if (!db) {
+    return { success: false, deletedCustomers: 0, deletedBatches: 0, keptMonthly: 0, newEpoch: '', error: 'Firestore DB offline' };
+  }
+
+  console.log(`[Firestore Reset] Starting server-side clean reset with mode=${mode}...`);
+
+  try {
+    // 1. Read monthly IDs
+    const monthlySnap = await getDocsFromServer(collection(db, 'monthly_customers'));
+    const monthlyIds = new Set<string>();
+    monthlySnap.forEach(d => monthlyIds.add(d.id));
+
+    // 2. Delete all uploads batches in chunks of <= 400
+    const batchesSnap = await getDocsFromServer(collection(db, 'all_uploads'));
+    let deletedBatches = 0;
+    const batchDocs = batchesSnap.docs;
+    for (let i = 0; i < batchDocs.length; i += 400) {
+      const chunk = batchDocs.slice(i, i + 400);
+      const b = writeBatch(db);
+      chunk.forEach(d => b.delete(d.ref));
+      await b.commit();
+      deletedBatches += chunk.length;
+    }
+
+    let deletedCustomers = 0;
+    let keptMonthly = 0;
+
+    if (mode === 'ALL') {
+      // Delete all monthly_customers
+      const mDocs = monthlySnap.docs;
+      for (let i = 0; i < mDocs.length; i += 400) {
+        const chunk = mDocs.slice(i, i + 400);
+        const b = writeBatch(db);
+        chunk.forEach(d => b.delete(d.ref));
+        await b.commit();
+      }
+
+      // Delete all all_customers
+      const custSnap = await getDocsFromServer(collection(db, 'all_customers'));
+      const cDocs = custSnap.docs;
+      for (let i = 0; i < cDocs.length; i += 400) {
+        const chunk = cDocs.slice(i, i + 400);
+        const b = writeBatch(db);
+        chunk.forEach(d => b.delete(d.ref));
+        await b.commit();
+        deletedCustomers += chunk.length;
+      }
+      keptMonthly = 0;
+    } else {
+      // Mode KEEP_MONTHLY: delete all_customers NOT in monthlyIds
+      const custSnap = await getDocsFromServer(collection(db, 'all_customers'));
+      const cDocs = custSnap.docs.filter(d => !monthlyIds.has(d.id));
+      for (let i = 0; i < cDocs.length; i += 400) {
+        const chunk = cDocs.slice(i, i + 400);
+        const b = writeBatch(db);
+        chunk.forEach(d => b.delete(d.ref));
+        await b.commit();
+        deletedCustomers += chunk.length;
+      }
+      keptMonthly = monthlyIds.size;
+    }
+
+    // 3. Bump settings/data_state with new epoch so all other devices wipe local cache on open
+    const newEpoch = 'epoch_' + Date.now() + '_' + Math.random().toString(36).slice(2, 10);
+    const newState: DataStateDoc = {
+      epoch: newEpoch,
+      resetAt: new Date().toISOString(),
+      mode,
+    };
+    await setDoc(doc(db, 'settings', 'data_state'), newState);
+    console.log(`[Firestore Write] caller=reset_tool, collection=settings, doc=data_state, newEpoch=${newEpoch}`);
+    console.log(`[Firestore Reset] Completed. Deleted: ${deletedCustomers} customers, ${deletedBatches} batches. Kept: ${keptMonthly} monthly.`);
+
+    return {
+      success: true,
+      deletedCustomers,
+      deletedBatches,
+      keptMonthly,
+      newEpoch,
+    };
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error('[Firestore Reset] Failed during reset execution:', msg);
+    return {
+      success: false,
+      deletedCustomers: 0,
+      deletedBatches: 0,
+      keptMonthly: 0,
+      newEpoch: '',
+      error: msg,
+    };
+  }
+}
+
+// ================= Real-time Listeners =================
+
 export function subscribeToFirestore(
   onCustomers: (customers: Customer[]) => void,
   onBatches: (batches: UploadBatch[]) => void,
@@ -469,6 +580,8 @@ export function subscribeToFirestore(
   if (!db) return () => {};
 
   const unsubCustomers = onSnapshot(collection(db, 'all_customers'), (snapshot) => {
+    // Ignore cache-only transient snapshots
+    if (snapshot.metadata.fromCache) return;
     const list: Customer[] = [];
     snapshot.forEach(docSnap => {
       const data = docSnap.data() as Customer;
@@ -482,6 +595,7 @@ export function subscribeToFirestore(
   });
 
   const unsubBatches = onSnapshot(collection(db, 'all_uploads'), (snapshot) => {
+    if (snapshot.metadata.fromCache) return;
     const list: UploadBatch[] = [];
     snapshot.forEach(docSnap => {
       const data = docSnap.data() as UploadBatch;
@@ -497,6 +611,7 @@ export function subscribeToFirestore(
   let unsubMonthly: (() => void) | null = null;
   if (onMonthlyCustomers) {
     unsubMonthly = onSnapshot(collection(db, 'monthly_customers'), (snapshot) => {
+      if (snapshot.metadata.fromCache) return;
       const list: Customer[] = [];
       snapshot.forEach(docSnap => {
         const data = docSnap.data() as Customer;
@@ -521,14 +636,20 @@ export function subscribeToFirestore(
   };
 }
 
-export async function syncSettingsToFirestore(settings: AppSettings): Promise<boolean> {
+// ================= Settings Sync =================
+
+export async function syncSettingsToFirestore(
+  settings: Partial<AppSettings>,
+  caller: string = 'settings_update'
+): Promise<boolean> {
   const db = getFirebaseDb();
   if (!db) return false;
 
   try {
     const docRef = doc(db, 'settings', 'app_config');
     const cleanSettings = JSON.parse(JSON.stringify(settings));
-    await setDoc(docRef, cleanSettings);
+    console.log(`[Firestore Write] caller=${caller}, collection=settings, doc=app_config`);
+    await setDoc(docRef, cleanSettings, { merge: true });
     return true;
   } catch (err) {
     console.error('Error syncing settings to Firestore:', err);
@@ -541,13 +662,13 @@ export async function fetchSettingsFromFirestore(): Promise<AppSettings | null> 
   if (!db) return null;
 
   try {
-    const docSnap = await getDoc(doc(db, 'settings', 'app_config'));
+    const docSnap = await getDocFromServer(doc(db, 'settings', 'app_config'));
     if (docSnap.exists()) {
       return docSnap.data() as AppSettings;
     }
     return null;
   } catch (err) {
-    console.error('Error fetching settings from Firestore:', err);
+    console.warn('Error fetching settings from Firestore server:', err);
     return null;
   }
 }

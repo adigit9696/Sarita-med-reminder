@@ -21,13 +21,16 @@ import {
   HelpCircle,
   ExternalLink,
   Sparkles,
-  Trash2
+  Trash2,
+  X,
+  AlertTriangle
 } from 'lucide-react';
 import type { AppSettings } from '@/types';
 import { audioAlerts } from '@/lib/audio-alerts';
 import { DEFAULT_WHATSAPP_TEMPLATE } from '@/lib/whatsapp';
 import { dataStore } from '@/lib/data-store';
 import { getActiveFirebaseConfig, testFirebaseConnection } from '@/lib/firebase';
+import { formatISTDateTime } from '@/lib/email-service';
 
 interface SettingsViewProps {
   settings: AppSettings;
@@ -65,6 +68,67 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [isSendingTestEmail, setIsSendingTestEmail] = useState(false);
   const [testEmailFeedback, setTestEmailFeedback] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [showEmailSetupGuide, setShowEmailSetupGuide] = useState(false);
+
+  // Safe Full-Reset Tool State (Section 3.3)
+  const [isResetModalOpen, setIsResetModalOpen] = useState(false);
+  const [resetStep, setResetStep] = useState<'backup' | 'options' | 'confirm' | 'executing' | 'summary'>('backup');
+  const [resetMode, setResetMode] = useState<'ALL' | 'KEEP_MONTHLY' | null>(null);
+  const [resetPin, setResetPin] = useState('');
+  const [resetConfirmWord, setResetConfirmWord] = useState('');
+  const [resetError, setResetError] = useState('');
+  const [resetSummary, setResetSummary] = useState<{
+    deletedCustomers: number;
+    deletedBatches: number;
+    keptMonthly: number;
+    newEpoch: string;
+  } | null>(null);
+
+  const handleStartSafeReset = () => {
+    setIsResetModalOpen(true);
+    setResetStep('backup');
+    setResetMode(null);
+    setResetPin('');
+    setResetConfirmWord('');
+    setResetError('');
+    setResetSummary(null);
+  };
+
+  const handleExecuteReset = async () => {
+    if (!resetMode) return;
+    setResetError('');
+
+    if (resetPin !== settings.pin) {
+      setResetError('Incorrect Staff PIN. Please try again.');
+      return;
+    }
+
+    if (resetConfirmWord.trim() !== 'DELETE') {
+      setResetError('Please type "DELETE" in capital letters to confirm.');
+      return;
+    }
+
+    setResetStep('executing');
+    try {
+      const res = await dataStore.executeSafeReset(resetMode);
+      if (res.success) {
+        setResetSummary({
+          deletedCustomers: res.deletedCustomers,
+          deletedBatches: res.deletedBatches,
+          keptMonthly: res.keptMonthly,
+          newEpoch: res.newEpoch,
+        });
+        setResetStep('summary');
+        audioAlerts.playSuccessChime();
+      } else {
+        setResetError(res.error || 'Failed to execute cloud database reset.');
+        setResetStep('confirm');
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setResetError(msg || 'An error occurred during reset.');
+      setResetStep('confirm');
+    }
+  };
 
   const handleSaveParameters = () => {
     onUpdateSettings({
@@ -579,6 +643,23 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             </div>
           )}
 
+          {/* Last Automatic Email Status & Helper Note */}
+          <div className="rounded-xl bg-slate-50 border border-slate-200/80 p-3 space-y-1">
+            <div className="flex items-center justify-between text-xs">
+              <span className="font-semibold text-slate-700">Last automatic email:</span>
+              <span className="font-mono text-slate-600">
+                {settings.lastOwnerEmailAlertSentAt
+                  ? `${formatISTDateTime(settings.lastOwnerEmailAlertSentAt)} — ${settings.lastOwnerEmailAlertStatus || 'sent'}`
+                  : settings.lastOwnerEmailAlertStatus
+                    ? `Never sent — ${settings.lastOwnerEmailAlertStatus}`
+                    : 'Never run yet'}
+              </span>
+            </div>
+            <p className="text-[11px] text-slate-500">
+              Runs automatically every morning around 9:00–9:59 AM IST on the live (Vercel) site.
+            </p>
+          </div>
+
           {/* Buttons: Save & Test Email */}
           <div className="flex items-center gap-3 pt-2 flex-wrap">
             <button
@@ -681,18 +762,283 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           </label>
 
           <button
-            onClick={() => {
-              if (confirm('CAUTION: This will wipe all local customers and batches. Proceed?')) {
-                onClearAll();
-                alert('Local database reset.');
-              }
-            }}
-            className="px-3 py-2 text-rose-600 hover:bg-rose-50 text-xs font-medium rounded-lg transition-colors ml-auto"
+            type="button"
+            onClick={handleStartSafeReset}
+            className="px-3 py-2 text-rose-600 hover:bg-rose-50 text-xs font-semibold rounded-lg border border-rose-200 hover:border-rose-300 transition-colors ml-auto flex items-center gap-1.5 cursor-pointer shadow-2xs"
           >
-            Clear Local Data
+            <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+            <span>Safe Database Reset / Clear Data</span>
           </button>
         </div>
       </div>
+
+      {/* Safe Full-Reset Tool Modal (Section 3.3) */}
+      {isResetModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs animate-fadeIn">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 space-y-5">
+            {/* Header */}
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center">
+                  <Trash2 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900">
+                    Safe Controlled Database Reset
+                  </h3>
+                  <p className="text-[11px] text-slate-500">
+                    Controlled cloud & cache reset with stale-device epoch protection
+                  </p>
+                </div>
+              </div>
+              {resetStep !== 'executing' && (
+                <button
+                  type="button"
+                  onClick={() => setIsResetModalOpen(false)}
+                  className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              )}
+            </div>
+
+            {/* Step 1: Backup Requirement */}
+            {resetStep === 'backup' && (
+              <div className="space-y-4">
+                <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs flex items-start gap-2.5">
+                  <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                  <div>
+                    <span className="font-bold">Step 1 of 3: Recommended Offline Backup</span>
+                    <p className="text-[11px] text-amber-800 mt-0.5">
+                      Before performing any database reset, downloading an offline encrypted backup copy (.JSON) is strongly recommended so your records can be restored if needed.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex flex-col sm:flex-row gap-2.5 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onExportData();
+                      setResetStep('options');
+                    }}
+                    className="flex-1 px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 transition-colors cursor-pointer shadow-xs"
+                  >
+                    <Download className="w-4 h-4" />
+                    <span>Download Backup (.JSON) & Proceed</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setResetStep('options')}
+                    className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-xl border border-slate-200 transition-colors cursor-pointer"
+                  >
+                    Skip (I have a backup)
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Step 2: Choose Reset Mode (No default selected) */}
+            {resetStep === 'options' && (
+              <div className="space-y-4">
+                <p className="text-xs font-semibold text-slate-800">
+                  Step 2 of 3: Choose Reset Scope (Explicit selection required):
+                </p>
+
+                <div className="space-y-3">
+                  <label
+                    onClick={() => setResetMode('ALL')}
+                    className={`block p-3.5 rounded-xl border-2 cursor-pointer transition-all ${
+                      resetMode === 'ALL'
+                        ? 'border-rose-500 bg-rose-50/50'
+                        : 'border-slate-200 hover:border-slate-300 bg-slate-50/50'
+                    }`}
+                  >
+                    <div className="flex items-start gap-3">
+                      <input
+                        type="radio"
+                        name="reset_mode"
+                        checked={resetMode === 'ALL'}
+                        onChange={() => setResetMode('ALL')}
+                        className="mt-0.5 text-rose-600 focus:ring-rose-500"
+                      />
+                      <div>
+                        <span className="text-xs font-bold text-slate-900 block">
+                          Option A — Clear Everything
+                        </span>
+                        <p className="text-[11px] text-slate-600 mt-0.5">
+                          Completely wipes all patient profiles (<code className="font-mono text-slate-800">all_customers</code>), monthly memberships (<code className="font-mono text-slate-800">monthly_customers</code>), and upload batch history (<code className="font-mono text-slate-800">all_uploads</code>). Leaves Staff PIN and email configurations untouched.
+                        </p>
+                      </div>
+                    </div>
+                  </label>
+
+                  <label
+                    onClick={() => setResetMode('KEEP_MONTHLY')}
+                    className={`block p-3.5 rounded-xl border-2 cursor-pointer transition-all ${
+                      resetMode === 'KEEP_MONTHLY'
+                        ? 'border-teal-500 bg-teal-50/50'
+                        : 'border-slate-200 hover:border-slate-300 bg-slate-50/50'
+                    }`}
+                  >
+                    <div className="flex items-start gap-3">
+                      <input
+                        type="radio"
+                        name="reset_mode"
+                        checked={resetMode === 'KEEP_MONTHLY'}
+                        onChange={() => setResetMode('KEEP_MONTHLY')}
+                        className="mt-0.5 text-teal-600 focus:ring-teal-500"
+                      />
+                      <div>
+                        <span className="text-xs font-bold text-slate-900 block">
+                          Option B — Clear Everything Except My Monthly Customers
+                        </span>
+                        <p className="text-[11px] text-slate-600 mt-0.5">
+                          Deletes all upload batches and deletes only customers that are <strong className="text-slate-800">NOT</strong> marked as Monthly Regulars. Preserves all chosen Monthly Regular customers intact in both All Customers and Monthly Customers tabs. Leaves Staff PIN and email configurations untouched.
+                        </p>
+                      </div>
+                    </div>
+                  </label>
+                </div>
+
+                <div className="flex items-center justify-between pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setResetStep('backup')}
+                    className="px-3 py-2 text-xs font-semibold text-slate-600 hover:text-slate-800 cursor-pointer"
+                  >
+                    Back
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={!resetMode}
+                    onClick={() => {
+                      setResetError('');
+                      setResetStep('confirm');
+                    }}
+                    className="px-4 py-2 bg-slate-900 hover:bg-slate-800 disabled:opacity-40 text-white text-xs font-bold rounded-xl transition-colors cursor-pointer shadow-xs"
+                  >
+                    Continue to Verification &rarr;
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Step 3: PIN Verification & Typed "DELETE" */}
+            {resetStep === 'confirm' && (
+              <div className="space-y-4">
+                <div className="p-3 rounded-xl bg-slate-100 text-slate-700 text-xs">
+                  <span className="font-semibold">Selected Scope: </span>
+                  <span className="font-bold text-slate-900">
+                    {resetMode === 'ALL' ? 'Option A — Clear Everything' : 'Option B — Clear Everything Except Monthly Regulars'}
+                  </span>
+                </div>
+
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                      Enter Staff Security PIN
+                    </label>
+                    <input
+                      type="password"
+                      maxLength={4}
+                      value={resetPin}
+                      onChange={(e) => setResetPin(e.target.value)}
+                      placeholder="••••"
+                      className="w-full bg-slate-50 border border-slate-200 p-2.5 rounded-xl text-slate-800 font-mono tracking-widest text-center text-sm focus:bg-white focus:border-rose-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                      Type <span className="font-mono text-rose-600 font-bold">DELETE</span> to confirm
+                    </label>
+                    <input
+                      type="text"
+                      value={resetConfirmWord}
+                      onChange={(e) => setResetConfirmWord(e.target.value)}
+                      placeholder="Type DELETE"
+                      className="w-full bg-slate-50 border border-slate-200 p-2.5 rounded-xl text-slate-800 font-mono text-center text-sm focus:bg-white focus:border-rose-500"
+                    />
+                  </div>
+                </div>
+
+                {resetError && (
+                  <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-medium flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 shrink-0" />
+                    <span>{resetError}</span>
+                  </div>
+                )}
+
+                <div className="flex items-center justify-between pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setResetStep('options')}
+                    className="px-3 py-2 text-xs font-semibold text-slate-600 hover:text-slate-800 cursor-pointer"
+                  >
+                    Back
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={!resetPin || resetConfirmWord.trim() !== 'DELETE'}
+                    onClick={handleExecuteReset}
+                    className="px-4 py-2.5 bg-rose-600 hover:bg-rose-700 active:bg-rose-800 disabled:opacity-40 text-white text-xs font-bold rounded-xl transition-colors cursor-pointer shadow-xs flex items-center gap-2"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    <span>Confirm & Execute Database Reset</span>
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Step 4: Executing Progress */}
+            {resetStep === 'executing' && (
+              <div className="py-8 text-center space-y-3">
+                <RefreshCw className="w-8 h-8 text-rose-600 animate-spin mx-auto" />
+                <h4 className="text-sm font-bold text-slate-900">
+                  Executing Safe Server-Side Reset...
+                </h4>
+                <p className="text-xs text-slate-500 max-w-xs mx-auto">
+                  Deleting documents from Firestore in chunks of ≤ 400 and generating new synchronization epoch. Please do not close this window.
+                </p>
+              </div>
+            )}
+
+            {/* Step 5: Summary */}
+            {resetStep === 'summary' && resetSummary && (
+              <div className="space-y-4">
+                <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 space-y-2">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+                    <span className="text-sm font-bold">Database Reset Completed Successfully!</span>
+                  </div>
+                  <div className="text-xs space-y-1 pt-1 font-medium text-emerald-800">
+                    <p>&bull; Deleted Customers: <strong>{resetSummary.deletedCustomers}</strong></p>
+                    <p>&bull; Deleted Upload Batches: <strong>{resetSummary.deletedBatches}</strong></p>
+                    <p>&bull; Kept Monthly Regular Customers: <strong>{resetSummary.keptMonthly}</strong></p>
+                    <p>&bull; New Synchronization Epoch: <code className="font-mono font-bold text-[11px] text-emerald-950">{resetSummary.newEpoch}</code></p>
+                  </div>
+                </div>
+
+                <p className="text-xs text-slate-500">
+                  A new epoch has been recorded in Firestore (<code className="font-mono text-slate-700">settings/data_state</code>). Any other shop PCs or mobile devices will automatically discard their stale local cache when next opened.
+                </p>
+
+                <button
+                  type="button"
+                  onClick={() => setIsResetModalOpen(false)}
+                  className="w-full px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl transition-colors cursor-pointer shadow-xs"
+                >
+                  Close & View Clean Database
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 };

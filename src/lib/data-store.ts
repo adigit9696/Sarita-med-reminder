@@ -6,7 +6,6 @@ import {
   syncSingleCustomerToFirestore,
   syncMonthlyCustomerToFirestore,
   fetchMonthlyCustomersFromFirestore,
-  syncAllMonthlyCustomersToFirestore,
   clearAllMonthlyCustomersFromFirestore,
   fetchCustomersFromFirestore, 
   syncBatchesToFirestore, 
@@ -16,94 +15,20 @@ import {
   syncSettingsToFirestore,
   fetchSettingsFromFirestore,
   subscribeToFirestore,
-  getFirebaseDb 
+  getFirebaseDb,
+  initOrGetCloudDataState,
+  executeServerSideReset,
 } from './firebase';
-import { SAMPLE_MERGED_CUSTOMERS, SAMPLE_BATCHES } from './sample-data';
 import { DEFAULT_WHATSAPP_TEMPLATE } from './whatsapp';
 import { audioAlerts } from './audio-alerts';
 import { deriveMonthInfo } from './marg-parser';
 import { getCustomersForBatch, computeMissingCustomers } from './monthly-comparator';
 
-/**
- * Merges remote customers from Firestore into the local customer array.
- * Real-time authoritative sync: propagates any changed customer properties across devices.
- */
-export function mergeRemoteCustomers(
-  localCustomers: Customer[],
-  remoteCustomers: Customer[]
-): { merged: Customer[]; hasChanges: boolean } {
-  if (!remoteCustomers || !Array.isArray(remoteCustomers) || remoteCustomers.length === 0) {
-    return { merged: localCustomers, hasChanges: false };
-  }
-
-  let hasChanges = false;
-  const localMap = new Map<string, Customer>();
-  const phoneMap = new Map<string, string>();
-  const codeMap = new Map<string, string>();
-
-  localCustomers.forEach(c => {
-    if (!c || !c.id) return;
-    localMap.set(c.id, { ...c });
-    if (c.phoneNorm) phoneMap.set(c.phoneNorm, c.id);
-    if (c.code) codeMap.set(String(c.code).trim().toLowerCase(), c.id);
-  });
-
-  remoteCustomers.forEach(remote => {
-    if (!remote || !remote.id) return;
-
-    let localId = remote.id;
-    if (!localMap.has(localId)) {
-      if (remote.phoneNorm && phoneMap.has(remote.phoneNorm)) {
-        localId = phoneMap.get(remote.phoneNorm)!;
-      } else if (remote.code && codeMap.has(String(remote.code).trim().toLowerCase())) {
-        localId = codeMap.get(String(remote.code).trim().toLowerCase())!;
-      }
-    }
-
-    if (localMap.has(localId)) {
-      const existing = localMap.get(localId)!;
-      const isDiff = 
-        existing.isMonthlyRegular !== Boolean(remote.isMonthlyRegular) ||
-        existing.lastRefillDate !== remote.lastRefillDate ||
-        existing.nextDueDate !== remote.nextDueDate ||
-        existing.alertDate !== remote.alertDate ||
-        existing.lastPurchaseDate !== remote.lastPurchaseDate ||
-        existing.totalSpend !== remote.totalSpend ||
-        (remote.updatedAt && (!existing.updatedAt || remote.updatedAt > existing.updatedAt));
-
-      if (isDiff) {
-        hasChanges = true;
-        // Never let a stale remote record deselect a locally selected monthly customer
-        const resolvedMonthly = (remote.updatedAt && existing.updatedAt && remote.updatedAt > existing.updatedAt)
-          ? Boolean(remote.isMonthlyRegular)
-          : (existing.isMonthlyRegular || Boolean(remote.isMonthlyRegular));
-
-        localMap.set(localId, {
-          ...existing,
-          ...remote,
-          id: existing.id,
-          isMonthlyRegular: resolvedMonthly,
-          medicines: Array.isArray(remote.medicines) && remote.medicines.length > 0 ? remote.medicines : existing.medicines,
-        });
-      }
-    } else {
-      hasChanges = true;
-      localMap.set(remote.id, remote);
-      if (remote.phoneNorm) phoneMap.set(remote.phoneNorm, remote.id);
-      if (remote.code) codeMap.set(String(remote.code).trim().toLowerCase(), remote.id);
-    }
-  });
-
-  return {
-    merged: Array.from(localMap.values()),
-    hasChanges,
-  };
-}
-
 const CUSTOMERS_KEY = 'sarita_med_customers_v2';
 const BATCHES_KEY = 'sarita_med_batches_v2';
 const SETTINGS_KEY = 'sarita_med_settings_v2';
 const REMINDERS_KEY = 'sarita_med_reminders_v2';
+const EPOCH_KEY = 'sarita_data_epoch';
 
 export const DEFAULT_SETTINGS: AppSettings = {
   pin: '1234',
@@ -126,6 +51,7 @@ class DataStoreService {
   private listeners: Set<() => void> = new Set();
   private isInitialized: boolean = false;
   private isSyncingWithFirebase: boolean = false;
+  private isApplyingRemote: boolean = false;
   private unsubscribeFirestore: (() => void) | null = null;
   private firebaseSyncStatus: 'disconnected' | 'synced' | 'syncing' | 'error' = 'disconnected';
 
@@ -170,7 +96,6 @@ class DataStoreService {
     if (savedSettings) {
       try {
         const parsed = JSON.parse(savedSettings);
-        // Migrate legacy Hindi template to new exact Hinglish template if unchanged
         if (!parsed.whatsappTemplate || parsed.whatsappTemplate.includes('नमस्ते') || parsed.whatsappTemplate.includes('सरिता फार्मेसी')) {
           parsed.whatsappTemplate = DEFAULT_WHATSAPP_TEMPLATE;
         }
@@ -180,15 +105,12 @@ class DataStoreService {
       }
     }
 
-    // 2. Load Local Data
+    // 2. Load Local Data (for immediate offline rendering)
     const savedCustomers = localStorage.getItem(CUSTOMERS_KEY);
     if (savedCustomers) {
       try {
         const raw = JSON.parse(savedCustomers);
         this.customers = deduplicateCustomerList(raw);
-        if (this.customers.length !== raw.length) {
-          this.persistLocalCustomers();
-        }
       } catch {
         this.customers = [];
       }
@@ -203,14 +125,12 @@ class DataStoreService {
       }
     }
 
-    // Do not populate mock sample data; use real data from Firebase or uploaded sheets
     this.batches = this.enrichBatches(this.batches);
-
     this.recalculateReminders();
     this.isInitialized = true;
     this.notify();
 
-    // 3. Try to connect and sync with Firebase if configured
+    // 3. Connect and perform authoritative server-confirmed sync with Firebase
     this.syncWithFirebase();
   }
 
@@ -227,132 +147,91 @@ class DataStoreService {
     this.notify();
 
     try {
-      // Fetch remote data
-      const remoteCustomers = await fetchCustomersFromFirestore();
-      const remoteBatches = await fetchBatchesFromFirestore();
-      const remoteMonthly = await fetchMonthlyCustomersFromFirestore();
+      // Step A: Stale-device protection (Section 3.2)
+      // Check cloud epoch from settings/data_state before doing any operations
+      const cloudState = await initOrGetCloudDataState();
+      const localEpoch = typeof window !== 'undefined' ? localStorage.getItem(EPOCH_KEY) : null;
+      const isStaleDevice = !localEpoch || (cloudState && cloudState.epoch && localEpoch !== cloudState.epoch);
 
-      // When remote is empty but local has newly uploaded data, auto-sync local data up to Firebase
-      const isRemoteCompletelyEmpty = (remoteCustomers !== null && remoteCustomers.length === 0) &&
-                                     (remoteBatches !== null && remoteBatches.length === 0);
-
-      if (isRemoteCompletelyEmpty && this.customers.length > 0) {
-        console.log(`[Firebase Sync] Remote database is empty. Auto-persisting ${this.customers.length} local customer records to Firebase 'all_customers'...`);
-        syncCustomersToFirestore(this.customers).catch(() => {});
-        if (this.batches.length > 0) {
-          syncBatchesToFirestore(this.batches).catch(() => {});
+      if (isStaleDevice && cloudState?.epoch) {
+        console.log(`[Epoch Guard] Stale or uninitialized device detected (localEpoch=${localEpoch || 'none'}, cloudEpoch=${cloudState.epoch}). Discarding local customers/batches cache...`);
+        this.customers = [];
+        this.batches = [];
+        this.reminders = [];
+        if (typeof window !== 'undefined') {
+          localStorage.removeItem(CUSTOMERS_KEY);
+          localStorage.removeItem(BATCHES_KEY);
+          localStorage.removeItem(REMINDERS_KEY);
+          localStorage.setItem(EPOCH_KEY, cloudState.epoch);
         }
-        const localMonthly = this.customers.filter(c => c.isMonthlyRegular);
-        if (localMonthly.length > 0) {
-          syncAllMonthlyCustomersToFirestore(localMonthly).catch(() => {});
-        }
-        this.firebaseSyncStatus = 'synced';
-        this.isSyncingWithFirebase = false;
-        this.notify();
-        return;
       }
 
-      if (remoteCustomers && remoteCustomers.length > 0) {
-        // Authoritative cloud data: ensure all real customers from Firebase are set without dropping local unsynced records
-        if (this.customers.length === 0) {
-          this.customers = deduplicateCustomerList(remoteCustomers);
-        } else {
-          const { merged } = mergeRemoteCustomers(this.customers, remoteCustomers);
-          this.customers = merged;
-          if (this.customers.length > remoteCustomers.length) {
-            syncCustomersToFirestore(this.customers).catch(() => {});
-          }
+      // Step B: Server-confirmed read (Section 3.1 #2)
+      const remoteCustomers = await fetchCustomersFromFirestore(true);
+      const remoteBatches = await fetchBatchesFromFirestore(true);
+      const remoteMonthly = await fetchMonthlyCustomersFromFirestore(true);
+
+      // If server reads succeeded, replace local cache with authoritative cloud state
+      if (remoteCustomers !== null) {
+        this.customers = deduplicateCustomerList(remoteCustomers);
+
+        if (remoteMonthly !== null) {
+          const monthlyIdSet = new Set(remoteMonthly.map(c => c.id));
+          this.customers.forEach(c => {
+            c.isMonthlyRegular = monthlyIdSet.has(c.id);
+          });
         }
         this.persistLocalCustomers(true);
-      } else if (this.customers.length > 0) {
-        console.log(`[Firebase Sync] Firestore has 0 customers, pushing ${this.customers.length} local records to 'all_customers'...`);
-        syncCustomersToFirestore(this.customers).catch(() => {});
       }
 
-      // Fetch dedicated monthly customers collection
-      if (remoteMonthly !== null && remoteMonthly.length > 0) {
-        const monthlyIdSet = new Set(remoteMonthly.map(c => c.id));
-        this.customers.forEach(c => {
-          if (monthlyIdSet.has(c.id)) {
-            c.isMonthlyRegular = true;
-          }
-        });
-        this.persistLocalCustomers(true);
-      } else if (remoteMonthly !== null && remoteMonthly.length === 0) {
-        // If remote has 0 monthly customers, BUT local already has customers selected as monthly:
-        const localMonthly = this.customers.filter(c => c.isMonthlyRegular);
-        if (localMonthly.length > 0) {
-          console.log(`[Firebase] Preserving ${localMonthly.length} local monthly customers and syncing to 'monthly_customers' collection in Firestore`);
-          syncAllMonthlyCustomersToFirestore(localMonthly).catch(() => {});
-        }
-      }
-
-      if (remoteBatches && remoteBatches.length > 0) {
-        const remoteIds = new Set(remoteBatches.map(b => b.id));
-        const combined = [...remoteBatches];
-        this.batches.forEach(b => {
-          if (!remoteIds.has(b.id)) {
-            combined.push(b);
-          }
-        });
-        this.batches = this.enrichBatches(combined);
+      if (remoteBatches !== null) {
+        this.batches = this.enrichBatches(remoteBatches);
         this.persistLocalBatches();
-        if (combined.length > remoteBatches.length) {
-          syncBatchesToFirestore(combined).catch(() => {});
-        }
-      } else if (this.batches.length > 0) {
-        console.log(`[Firebase Sync] Firestore has 0 batches, pushing ${this.batches.length} local batches to 'all_uploads'...`);
-        syncBatchesToFirestore(this.batches).catch(() => {});
+      }
+
+      if (cloudState?.epoch && typeof window !== 'undefined') {
+        localStorage.setItem(EPOCH_KEY, cloudState.epoch);
       }
 
       this.recalculateReminders();
       this.firebaseSyncStatus = 'synced';
 
-      // Start real-time Firestore synchronization across all devices
+      // Step C: Start real-time Firestore listeners (Section 3.1 #3)
       if (!this.unsubscribeFirestore) {
         this.unsubscribeFirestore = subscribeToFirestore(
-          (remoteCustomers) => {
-            if (!this.isSyncingWithFirebase && Array.isArray(remoteCustomers)) {
-              if (remoteCustomers.length === 0) {
-                // Do not wipe local state on empty snapshot
-                return;
-              }
-
-              const { merged, hasChanges } = mergeRemoteCustomers(this.customers, remoteCustomers);
-              if (hasChanges || merged.length !== this.customers.length) {
-                this.customers = merged;
-                this.persistLocalCustomers(true);
-                this.recalculateReminders();
-                this.notify();
-              }
+          (incomingCustomers) => {
+            if (this.isApplyingRemote || this.isSyncingWithFirebase) return;
+            this.isApplyingRemote = true;
+            try {
+              this.customers = deduplicateCustomerList(incomingCustomers);
+              this.persistLocalCustomers(true);
+              this.recalculateReminders();
+              this.notify();
+            } finally {
+              this.isApplyingRemote = false;
             }
           },
-          (remoteBatches) => {
-            if (!this.isSyncingWithFirebase && Array.isArray(remoteBatches)) {
-              if (remoteBatches.length === 0) {
-                // Do not wipe local state on empty snapshot
-                return;
-              }
-
-              if (remoteBatches.length !== this.batches.length) {
-                this.batches = this.enrichBatches(remoteBatches);
-                this.persistLocalBatches();
-                this.notify();
-              }
+          (incomingBatches) => {
+            if (this.isApplyingRemote || this.isSyncingWithFirebase) return;
+            this.isApplyingRemote = true;
+            try {
+              this.batches = this.enrichBatches(incomingBatches);
+              this.persistLocalBatches();
+              this.notify();
+            } finally {
+              this.isApplyingRemote = false;
             }
           },
-          (remoteMonthlyList) => {
-            if (!this.isSyncingWithFirebase && Array.isArray(remoteMonthlyList)) {
-              if (remoteMonthlyList.length === 0) {
-                // When remoteMonthlyList is empty, do NOT wipe local monthly selections on initial connect
-                return;
-              }
-              const monthlyIdSet = new Set(remoteMonthlyList.map(c => c.id));
+          (incomingMonthly) => {
+            if (this.isApplyingRemote || this.isSyncingWithFirebase) return;
+            this.isApplyingRemote = true;
+            try {
+              const monthlyIdSet = new Set(incomingMonthly.map(c => c.id));
               let changed = false;
               this.customers.forEach(c => {
-                const shouldBeMonthly = monthlyIdSet.has(c.id);
-                if (c.isMonthlyRegular !== shouldBeMonthly) {
-                  c.isMonthlyRegular = shouldBeMonthly;
+                const shouldBe = monthlyIdSet.has(c.id);
+                if (c.isMonthlyRegular !== shouldBe) {
+                  c.isMonthlyRegular = shouldBe;
                   changed = true;
                 }
               });
@@ -361,12 +240,14 @@ class DataStoreService {
                 this.recalculateReminders();
                 this.notify();
               }
+            } finally {
+              this.isApplyingRemote = false;
             }
           }
         );
       }
     } catch (err) {
-      console.warn('Firebase sync warning:', err);
+      console.warn('[Firebase Sync] Warning during server-confirmed sync:', err);
       this.firebaseSyncStatus = 'error';
     } finally {
       this.isSyncingWithFirebase = false;
@@ -374,10 +255,14 @@ class DataStoreService {
     }
   }
 
-  public async forcePushToFirestore(): Promise<{ success: boolean; count: number; error?: string }> {
+  /**
+   * Manual Sync = Pull-only (Section 3.1 #4)
+   * Refreshes local cache from cloud; never pushes local-only data to Firestore.
+   */
+  public async forcePullFromFirestore(): Promise<{ success: boolean; count: number; error?: string }> {
     const db = getFirebaseDb();
     if (!db) {
-      return { success: false, count: 0, error: 'Firebase is not initialized or credentials are missing.' };
+      return { success: false, count: 0, error: 'Cloud service is offline or not configured.' };
     }
 
     this.isSyncingWithFirebase = true;
@@ -385,14 +270,45 @@ class DataStoreService {
     this.notify();
 
     try {
-      const okCust = await syncCustomersToFirestore(this.customers);
-      if (this.batches.length > 0) {
-        await syncBatchesToFirestore(this.batches);
+      // Refresh epoch check
+      const cloudState = await initOrGetCloudDataState();
+      if (cloudState?.epoch && typeof window !== 'undefined') {
+        const localEpoch = localStorage.getItem(EPOCH_KEY);
+        if (localEpoch !== cloudState.epoch) {
+          this.customers = [];
+          this.batches = [];
+          this.reminders = [];
+          localStorage.removeItem(CUSTOMERS_KEY);
+          localStorage.removeItem(BATCHES_KEY);
+          localStorage.removeItem(REMINDERS_KEY);
+          localStorage.setItem(EPOCH_KEY, cloudState.epoch);
+        }
       }
-      await syncSettingsToFirestore(this.settings);
 
+      const remoteCustomers = await fetchCustomersFromFirestore(true);
+      const remoteBatches = await fetchBatchesFromFirestore(true);
+      const remoteMonthly = await fetchMonthlyCustomersFromFirestore(true);
+
+      if (remoteCustomers !== null) {
+        this.customers = deduplicateCustomerList(remoteCustomers);
+        if (remoteMonthly !== null) {
+          const monthlyIdSet = new Set(remoteMonthly.map(c => c.id));
+          this.customers.forEach(c => {
+            c.isMonthlyRegular = monthlyIdSet.has(c.id);
+          });
+        }
+        this.persistLocalCustomers(true);
+      }
+
+      if (remoteBatches !== null) {
+        this.batches = this.enrichBatches(remoteBatches);
+        this.persistLocalBatches();
+      }
+
+      this.recalculateReminders();
       this.firebaseSyncStatus = 'synced';
-      return { success: okCust, count: this.customers.length };
+      this.notify();
+      return { success: true, count: this.customers.length };
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       this.firebaseSyncStatus = 'error';
@@ -401,6 +317,13 @@ class DataStoreService {
       this.isSyncingWithFirebase = false;
       this.notify();
     }
+  }
+
+  /**
+   * Maintained for backwards compatibility: strictly executes a pull-only refresh.
+   */
+  public async forcePushToFirestore(): Promise<{ success: boolean; count: number; error?: string }> {
+    return this.forcePullFromFirestore();
   }
 
   public recalculateReminders(): void {
@@ -476,10 +399,15 @@ class DataStoreService {
     this.recalculateReminders();
     this.notify();
 
-    // Persist settings to Firestore cloud so Serverless Cron and other devices sync immediately
-    syncSettingsToFirestore(this.settings).catch(() => {});
+    // Persist only changed settings fields to Firestore
+    syncSettingsToFirestore(newSettings, 'settings_update').catch(() => {});
   }
 
+  /**
+   * Upload Commit (Section 3.1 #7):
+   * Writes ONLY the new UploadBatch document and the customer documents that this upload actually
+   * created or changed (touchedCustomers), NOT the entire customer list.
+   */
   public async setCustomers(customers: Customer[], batch?: UploadBatch): Promise<void> {
     this.customers = deduplicateCustomerList(customers);
     let enrichedBatch: UploadBatch | undefined;
@@ -492,37 +420,34 @@ class DataStoreService {
     this.recalculateReminders();
     this.notify();
 
-    // Async sync to Firestore with robust batch creation
     if (enrichedBatch) {
       this.firebaseSyncStatus = 'syncing';
       this.notify();
       try {
-        const batchOk = await saveSingleBatchToFirestore(enrichedBatch);
-        const custOk = await syncCustomersToFirestore(this.customers);
-        
-        // Also sync any monthly customers if present
-        const monthlyCusts = this.getMonthlyCustomers();
-        if (monthlyCusts.length > 0) {
-          await syncAllMonthlyCustomersToFirestore(monthlyCusts);
-        }
+        // 1. Save single upload batch document
+        const batchOk = await saveSingleBatchToFirestore(enrichedBatch, 'upload_commit');
+
+        // 2. Identify strictly the touched / new customers in this batch
+        const touchedIds = new Set(enrichedBatch.customerIds || []);
+        const touchedCustomers = this.customers.filter(c => touchedIds.has(c.id));
+
+        // 3. Save only touched customers with explicit authorization flag
+        const custOk = await syncCustomersToFirestore(touchedCustomers, {
+          caller: 'upload_commit',
+          isUploadCommit: true,
+        });
 
         if (batchOk && custOk) {
           this.firebaseSyncStatus = 'synced';
-          console.log(`[Firebase] Batch ${enrichedBatch.id} (${enrichedBatch.fileName}) and ${this.customers.length} customers successfully saved to Firestore!`);
+          console.log(`[Firebase] Batch ${enrichedBatch.id} (${enrichedBatch.fileName}) and ${touchedCustomers.length} touched customers successfully saved to Firestore!`);
         } else {
           this.firebaseSyncStatus = 'error';
         }
       } catch (err) {
-        console.error('[Firebase] Error persisting new batch to Firestore:', err);
+        console.error('[Firebase] Error persisting upload commit to Firestore:', err);
         this.firebaseSyncStatus = 'error';
       } finally {
         this.notify();
-      }
-    } else {
-      syncCustomersToFirestore(this.customers).catch(() => {});
-      const monthlyCusts = this.getMonthlyCustomers();
-      if (monthlyCusts.length > 0) {
-        syncAllMonthlyCustomersToFirestore(monthlyCusts).catch(() => {});
       }
     }
   }
@@ -564,7 +489,6 @@ class DataStoreService {
     cust.lastPurchaseDate = dispensedDate;
     cust.lastRefillDate = dispensedDate;
 
-    // Reset customer cycle for actualCycle days starting from the exact dispensed date (timezone-safe)
     const parts = dispensedDate.split('-').map(Number);
     if (parts.length >= 3 && !isNaN(parts[0]) && !isNaN(parts[1]) && !isNaN(parts[2])) {
       const dt = new Date(parts[0], parts[1] - 1, parts[2] + actualCycle);
@@ -593,12 +517,10 @@ class DataStoreService {
     // Play pleasant confirmation chime
     audioAlerts.playSuccessChime();
 
-    // Immediately sync single customer to Firestore so other devices update within ~100ms
-    syncSingleCustomerToFirestore(cust).catch(() => {
-      syncCustomersToFirestore(this.customers).catch(() => {});
-    });
+    // Targeted single-document writes only (Section 3.1 #1)
+    syncSingleCustomerToFirestore(cust, 'record_dispensed').catch(() => {});
     if (cust.isMonthlyRegular) {
-      syncMonthlyCustomerToFirestore(cust, true).catch(() => {});
+      syncMonthlyCustomerToFirestore(cust, true, 'record_dispensed').catch(() => {});
     }
   }
 
@@ -618,15 +540,13 @@ class DataStoreService {
     cust.isMonthlyRegular = isMonthly;
     cust.updatedAt = new Date().toISOString();
 
-    // Persist immediately to local storage so page reload preserves state without delay
     this.persistLocalCustomers(true);
     this.recalculateRemindersDebounced();
     this.notify();
 
-    // Instantly sync dedicated monthly_customers collection in Firestore
-    syncMonthlyCustomerToFirestore(cust, isMonthly).catch((err) => {
-      console.warn('[Firebase] Failed to sync monthly customer, falling back to master write:', err);
-      syncSingleCustomerToFirestore(cust).catch(() => {});
+    // Targeted write to monthly_customers and master doc flag (Section 3.1 #6)
+    syncMonthlyCustomerToFirestore(cust, isMonthly, 'monthly_toggle').catch((err) => {
+      console.warn('[Firebase] Failed to sync monthly customer:', err);
     });
   }
 
@@ -640,8 +560,7 @@ class DataStoreService {
     this.recalculateReminders();
     this.notify();
 
-    clearAllMonthlyCustomersFromFirestore().catch(() => {});
-    syncCustomersToFirestore(this.customers).catch(() => {});
+    clearAllMonthlyCustomersFromFirestore('deselect_all_monthly').catch(() => {});
   }
 
   public updateCustomerDetails(customerId: string, updates: Partial<Customer>): void {
@@ -700,11 +619,10 @@ class DataStoreService {
     this.recalculateReminders();
     this.notify();
 
-    syncSingleCustomerToFirestore(updatedCust).catch(() => {
-      syncCustomersToFirestore(this.customers).catch(() => {});
-    });
+    // Targeted single-document write only (Section 3.1 #1)
+    syncSingleCustomerToFirestore(updatedCust, 'customer_update').catch(() => {});
     if (updatedCust.isMonthlyRegular) {
-      syncMonthlyCustomerToFirestore(updatedCust, true).catch(() => {});
+      syncMonthlyCustomerToFirestore(updatedCust, true, 'customer_update').catch(() => {});
     }
   }
 
@@ -712,19 +630,12 @@ class DataStoreService {
     const batchIndex = this.batches.findIndex(b => b.id === batchId);
     if (batchIndex === -1) return false;
 
-    // Remove the batch packaging record from the uploaded batches list
     this.batches.splice(batchIndex, 1);
-
-    // STRICT USER REQUIREMENT:
-    // Deleting an upload batch entry from the app must only remove the specific packaging record for that month.
-    // All customer data saved under "All Customers" MUST remain 100% secure in Firebase and accessible in the app!
-    // Do NOT delete customers from this.customers.
     this.persistLocalBatches();
     this.recalculateReminders();
     this.notify();
 
-    // Remove only the batch upload record from Firebase without touching customer documents
-    deleteBatchFromFirestore(batchId).catch(err => {
+    deleteBatchFromFirestore(batchId, 'delete_batch').catch(err => {
       console.error('Error deleting batch from Firestore:', err);
     });
     return true;
@@ -737,77 +648,12 @@ class DataStoreService {
     const batch = this.batches[batchIndex];
     batch.status = 'rolled_back';
 
-    // Keep all customer records intact in "All Customers"
     this.persistLocalBatches();
     this.recalculateReminders();
     this.notify();
 
-    syncBatchesToFirestore(this.batches).catch(() => {});
+    saveSingleBatchToFirestore(batch, 'rollback_batch').catch(() => {});
     return true;
-  }
-
-  public async forcePullFromFirestore(): Promise<{ success: boolean; count: number; error?: string }> {
-    const db = getFirebaseDb();
-    if (!db) {
-      return { success: false, count: 0, error: 'Cloud service is offline or not configured.' };
-    }
-
-    this.isSyncingWithFirebase = true;
-    this.firebaseSyncStatus = 'syncing';
-    this.notify();
-
-    try {
-      const remoteCustomers = await fetchCustomersFromFirestore();
-      const remoteBatches = await fetchBatchesFromFirestore();
-      const remoteMonthly = await fetchMonthlyCustomersFromFirestore();
-
-      // If remote database was manually wiped by the user in Firebase Console:
-      if (remoteCustomers !== null && remoteCustomers.length === 0 && remoteBatches !== null && remoteBatches.length === 0) {
-        console.log('[Force Pull] Detected empty database in Cloud Firestore. Resetting local state to 0.');
-        this.customers = [];
-        this.batches = [];
-        this.reminders = [];
-        this.persistLocalCustomers(true);
-        this.persistLocalBatches();
-        this.recalculateReminders();
-        this.firebaseSyncStatus = 'synced';
-        this.notify();
-        return { success: true, count: 0 };
-      }
-
-      if (remoteCustomers && remoteCustomers.length > 0) {
-        // Authoritative merge from Firestore cloud database
-        const { merged } = mergeRemoteCustomers(this.customers, remoteCustomers);
-        this.customers = merged.length >= remoteCustomers.length ? merged : remoteCustomers;
-        this.persistLocalCustomers(true);
-      }
-
-      // Authoritative sync with dedicated monthly_customers collection
-      if (remoteMonthly !== null) {
-        const monthlyIdSet = new Set(remoteMonthly.map(c => c.id));
-        this.customers.forEach(c => {
-          c.isMonthlyRegular = monthlyIdSet.has(c.id);
-        });
-        this.persistLocalCustomers(true);
-      }
-
-      if (remoteBatches && remoteBatches.length > 0) {
-        this.batches = this.enrichBatches(remoteBatches);
-        this.persistLocalBatches();
-      }
-
-      this.recalculateReminders();
-      this.firebaseSyncStatus = 'synced';
-      this.notify();
-      return { success: true, count: this.customers.length };
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      this.firebaseSyncStatus = 'error';
-      return { success: false, count: 0, error: msg };
-    } finally {
-      this.isSyncingWithFirebase = false;
-      this.notify();
-    }
   }
 
   public clearAllData(): void {
@@ -818,9 +664,44 @@ class DataStoreService {
       localStorage.removeItem(CUSTOMERS_KEY);
       localStorage.removeItem(BATCHES_KEY);
       localStorage.removeItem(REMINDERS_KEY);
-      localStorage.setItem('sarita_has_initialized_v2', 'true');
     }
+    this.recalculateReminders();
     this.notify();
+  }
+
+  /**
+   * Safe Full-Reset Tool (Section 3.3):
+   * Deletes data from the server in chunks, bumps settings/data_state.epoch,
+   * and clears local caches accordingly.
+   */
+  public async executeSafeReset(mode: 'ALL' | 'KEEP_MONTHLY'): Promise<{
+    success: boolean;
+    deletedCustomers: number;
+    deletedBatches: number;
+    keptMonthly: number;
+    newEpoch: string;
+    error?: string;
+  }> {
+    const res = await executeServerSideReset(mode);
+    if (res.success) {
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(EPOCH_KEY, res.newEpoch);
+      }
+      if (mode === 'ALL') {
+        this.customers = [];
+        this.batches = [];
+        this.reminders = [];
+      } else {
+        // Keep strictly the monthly customers
+        this.customers = this.customers.filter(c => c.isMonthlyRegular);
+        this.batches = [];
+      }
+      this.persistLocalCustomers(true);
+      this.persistLocalBatches();
+      this.recalculateReminders();
+      this.notify();
+    }
+    return res;
   }
 
   public exportJson(): string {
@@ -837,11 +718,11 @@ class DataStoreService {
     try {
       const data = JSON.parse(jsonStr);
       if (Array.isArray(data.customers)) {
-        this.customers = data.customers;
-        this.persistLocalCustomers();
+        this.customers = deduplicateCustomerList(data.customers);
+        this.persistLocalCustomers(true);
       }
       if (Array.isArray(data.batches)) {
-        this.batches = data.batches;
+        this.batches = this.enrichBatches(data.batches);
         this.persistLocalBatches();
       }
       if (data.settings) {
@@ -849,7 +730,10 @@ class DataStoreService {
       }
       this.recalculateReminders();
       this.notify();
-      syncCustomersToFirestore(this.customers).catch(() => {});
+
+      // Authorized restore
+      syncCustomersToFirestore(this.customers, { caller: 'restore_backup', isRestore: true }).catch(() => {});
+      syncBatchesToFirestore(this.batches, 'restore_backup').catch(() => {});
       return true;
     } catch {
       return false;

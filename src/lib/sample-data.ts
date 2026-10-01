@@ -1,6 +1,7 @@
 import type { Customer, UploadBatch } from "@/types";
 
-export const SAMPLE_MERGED_CUSTOMERS: Customer[] = [
+const isDemoEnabled = typeof process !== 'undefined' && process.env.NEXT_PUBLIC_ENABLE_DEMO_DATA === 'true';
+export const SAMPLE_MERGED_CUSTOMERS: Customer[] = isDemoEnabled ? [
   {
     "id": "cust_0006",
     "name": "NITI RANI KHESARI",
@@ -50564,9 +50565,9 @@ export const SAMPLE_MERGED_CUSTOMERS: Customer[] = [
       }
     ]
   }
-];
+] : [];
 
-export const SAMPLE_BATCHES: UploadBatch[] = [
+export const SAMPLE_BATCHES: UploadBatch[] = isDemoEnabled ? [
   {
     id: "batch_jul_2026",
     fileName: "jully26.XLS",
@@ -50601,4 +50602,4 @@ export const SAMPLE_BATCHES: UploadBatch[] = [
     status: "committed",
     customerIds: []
   }
-];
+] : [];

@@ -47,6 +47,7 @@ export interface Customer {
   medicines: CustomerMedicine[];
   refillCycleDays?: number; // customer-level refill duration in days (default 30)
   history?: PurchaseRecord[];
+  lastBillWisePeriod?: string; // e.g. "2026-09-01_2026-09-30" to prevent double counting on re-upload
   createdAt: string;
   updatedAt: string;
 }
@@ -61,7 +62,7 @@ export interface UploadBatch {
   uploadDate: string;
   periodStart: string;
   periodEnd: string;
-  formatType: 'MARG_GROUPED_SUMMARY' | 'TABULAR_SALES_REGISTER';
+  formatType: 'MARG_GROUPED_SUMMARY' | 'TABULAR_SALES_REGISTER' | 'MARG_BILL_WISE_STATEMENT';
   totalRows: number;
   totalCustomers: number;
   newCustomersCount: number;
@@ -73,6 +74,57 @@ export interface UploadBatch {
   folderName?: string;
   filesCount?: number;
   dailyFilesList?: string[];
+  dataCheck?: MargDataCheckReport;
+}
+
+export interface MargReviewItem {
+  rowNum: number;
+  billNo: string;
+  date?: string;
+  description: string;
+  amount: number;
+  reason: 'PHONE_ONLY' | 'UNVERIFIED_IDENTIFIER' | 'UNRECOGNISED_LAYOUT' | 'AMBIGUOUS_NAME_MERGE' | 'BILL_BEFORE_DATE';
+  note?: string;
+}
+
+export interface DayCheckMismatch {
+  date: string;
+  billCount: number;
+  billSum: number;
+  dayTotalInFile: number;
+  difference: number;
+}
+
+export interface MargDataCheckReport {
+  periodTitle: string;
+  expectedPeriod: string;
+  totalDaysFound: number;
+  expectedDays: number;
+  billsParsed: number;
+  footerBills: number;
+  totalAmountParsed: number;
+  footerGrandTotal: number;
+  isBillsCountMatched: boolean;
+  isGrandTotalMatched: boolean;
+  dayMismatches: DayCheckMismatch[];
+  classCounts: {
+    phone: number;
+    phoneAmount: number;
+    distinctPhones: number;
+    code: number;
+    codeAmount: number;
+    distinctCodes: number;
+    nameOnly: number;
+    nameOnlyAmount: number;
+    distinctNames: number;
+    unverified: number;
+    unverifiedAmount: number;
+    walkIn: number;
+    walkInAmount: number;
+    needsReview: number;
+    needsReviewAmount: number;
+  };
+  needsReviewList: MargReviewItem[];
 }
 
 export interface MissingCustomerAuditItem {

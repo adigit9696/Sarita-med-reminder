@@ -119,32 +119,32 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     <div className="space-y-6">
       {/* 5-Day Refill Alert Notification Banner */}
       {actionToday.length > 0 && (
-        <div className="p-4 rounded-2xl bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 text-white shadow-lg shadow-amber-500/15 flex flex-col sm:flex-row sm:items-center justify-between gap-4 animate-fadeIn">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-white/20 backdrop-blur-xs flex items-center justify-center shrink-0">
-              <Bell className="w-5 h-5 text-white animate-bell-ring" />
+        <div className="p-4 sm:p-5 rounded-2xl bg-amber-50/90 border border-amber-200/90 text-amber-950 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-clinical">
+          <div className="flex items-center gap-3.5">
+            <div className="w-10 h-10 rounded-xl bg-amber-100 text-amber-800 border border-amber-200/80 flex items-center justify-center shrink-0">
+              <Bell className="w-5 h-5 text-amber-700" />
             </div>
             <div>
-              <h3 className="font-bold text-sm tracking-wide">
-                Refill Alert: {dueIn5Days.length} Monthly Customers Due in Next 5 Days
+              <h3 className="font-bold text-sm sm:text-base text-amber-950 tracking-tight">
+                Refill Alert: {dueIn5Days.length} Monthly Patients Due in Next 5 Days
                 {overdue.length > 0 && ` (${overdue.length} Overdue)`}
               </h3>
-              <p className="text-xs text-amber-100 mt-0.5">
+              <p className="text-xs text-amber-800/80 mt-0.5">
                 Reach out to these patients today so their chronic prescriptions never lapse.
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-2 self-start sm:self-auto">
+          <div className="flex items-center gap-2 self-start sm:self-auto shrink-0">
             <button
               onClick={handlePlayRefillSound}
-              className="px-3.5 py-1.5 rounded-lg bg-white/20 hover:bg-white/30 text-white text-xs font-semibold backdrop-blur-xs flex items-center gap-1.5 transition-colors"
+              className="px-3.5 py-1.5 rounded-xl bg-white hover:bg-amber-100/70 text-amber-900 border border-amber-300/80 text-xs font-semibold flex items-center gap-1.5 transition-clinical cursor-pointer"
             >
               <Volume2 className="w-3.5 h-3.5" />
               <span>Chime Alert</span>
             </button>
             <button
               onClick={() => setActiveFilter('DUE_5_DAYS')}
-              className="px-3.5 py-1.5 rounded-lg bg-white text-amber-900 hover:bg-amber-50 text-xs font-bold transition-colors shadow-xs"
+              className="px-3.5 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold transition-clinical shadow-xs cursor-pointer"
             >
               View Due List
             </button>
@@ -153,24 +153,24 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       )}
 
       {/* Top Stat Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5 sm:gap-4">
         {/* Card 1: Monthly Customers */}
         <div 
           onClick={() => setActiveFilter('ACTION_TODAY')}
-          className="p-5 rounded-2xl bg-white border border-slate-200/80 hover:border-teal-400 transition-all shadow-2xs hover:shadow-md cursor-pointer group"
+          className="p-5 rounded-2xl bg-white border border-slate-200/90 hover:border-teal-500/80 transition-clinical shadow-2xs hover:shadow-xs cursor-pointer group relative overflow-hidden"
         >
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-              Monthly Customers
+            <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
+              Monthly Regulars
             </span>
-            <div className="w-8 h-8 rounded-lg bg-teal-50 text-teal-600 flex items-center justify-center group-hover:bg-teal-600 group-hover:text-white transition-colors">
+            <div className="w-9 h-9 rounded-xl bg-teal-50 text-teal-700 border border-teal-100 flex items-center justify-center group-hover:bg-teal-600 group-hover:text-white transition-clinical">
               <CalendarClock className="w-4 h-4" />
             </div>
           </div>
-          <p className="text-2xl font-bold text-slate-900 mt-2">
+          <p className="text-2xl sm:text-3xl font-bold font-mono text-slate-900 mt-2.5 tabular-nums">
             {monthlyCustomers.length}
           </p>
-          <p className="text-[11px] text-teal-600 font-medium mt-1">
+          <p className="text-[11px] text-teal-700 font-semibold mt-1">
             Repeat monthly prescription buyers
           </p>
         </div>
@@ -178,20 +178,20 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         {/* Card 2: Due in 5 Days */}
         <div 
           onClick={() => setActiveFilter('DUE_5_DAYS')}
-          className="p-5 rounded-2xl bg-white border border-slate-200/80 hover:border-amber-400 transition-all shadow-2xs hover:shadow-md cursor-pointer group"
+          className="p-5 rounded-2xl bg-white border border-slate-200/90 hover:border-amber-400/80 transition-clinical shadow-2xs hover:shadow-xs cursor-pointer group relative overflow-hidden"
         >
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+            <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
               Due in 5 Days
             </span>
-            <div className="w-8 h-8 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center group-hover:bg-amber-500 group-hover:text-white transition-colors">
+            <div className="w-9 h-9 rounded-xl bg-amber-50 text-amber-700 border border-amber-200/80 flex items-center justify-center group-hover:bg-amber-600 group-hover:text-white transition-clinical">
               <Bell className="w-4 h-4" />
             </div>
           </div>
-          <p className="text-2xl font-bold text-amber-600 mt-2">
+          <p className="text-2xl sm:text-3xl font-bold font-mono text-amber-700 mt-2.5 tabular-nums">
             {dueIn5Days.length}
           </p>
-          <p className="text-[11px] text-amber-700 font-medium mt-1">
+          <p className="text-[11px] text-amber-800 font-semibold mt-1">
             Action required within 5 days
           </p>
         </div>
@@ -199,35 +199,35 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         {/* Card 3: Overdue */}
         <div 
           onClick={() => setActiveFilter('OVERDUE')}
-          className="p-5 rounded-2xl bg-white border border-slate-200/80 hover:border-rose-400 transition-all shadow-2xs hover:shadow-md cursor-pointer group"
+          className="p-5 rounded-2xl bg-white border border-slate-200/90 hover:border-rose-400/80 transition-clinical shadow-2xs hover:shadow-xs cursor-pointer group relative overflow-hidden"
         >
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+            <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
               Overdue Refills
             </span>
-            <div className="w-8 h-8 rounded-lg bg-rose-50 text-rose-600 flex items-center justify-center group-hover:bg-rose-500 group-hover:text-white transition-colors">
+            <div className="w-9 h-9 rounded-xl bg-rose-50 text-rose-700 border border-rose-200/80 flex items-center justify-center group-hover:bg-rose-600 group-hover:text-white transition-clinical">
               <AlertTriangle className="w-4 h-4" />
             </div>
           </div>
-          <p className="text-2xl font-bold text-rose-600 mt-2">
+          <p className="text-2xl sm:text-3xl font-bold font-mono text-rose-700 mt-2.5 tabular-nums">
             {overdue.length}
           </p>
-          <p className="text-[11px] text-rose-600 font-medium mt-1">
-            Past due date — call immediately
+          <p className="text-[11px] text-rose-700 font-semibold mt-1">
+            Past due date: call immediately
           </p>
         </div>
 
         {/* Card 4: Total All Customers */}
-        <div className="p-5 rounded-2xl bg-white border border-slate-200/80 transition-all shadow-2xs">
+        <div className="p-5 rounded-2xl bg-white border border-slate-200/90 transition-clinical shadow-2xs relative overflow-hidden">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+            <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
               All Registered
             </span>
-            <div className="w-8 h-8 rounded-lg bg-slate-100 text-slate-600 flex items-center justify-center">
+            <div className="w-9 h-9 rounded-xl bg-slate-100 text-slate-600 border border-slate-200 flex items-center justify-center">
               <Users className="w-4 h-4" />
             </div>
           </div>
-          <p className="text-2xl font-bold text-slate-900 mt-2">
+          <p className="text-2xl sm:text-3xl font-bold font-mono text-slate-900 mt-2.5 tabular-nums">
             {customers.length}
           </p>
           <p className="text-[11px] text-slate-500 font-medium mt-1">
@@ -237,13 +237,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       </div>
 
       {/* Action Today Section */}
-      <div className="bg-white border border-slate-200/80 rounded-2xl shadow-xs overflow-hidden">
+      <div className="bg-white border border-slate-200/90 rounded-2xl shadow-xs overflow-hidden">
         {/* Table Header & Filter Chips */}
-        <div className="p-5 border-b border-slate-200/80 flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="p-5 border-b border-slate-200/90 flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
               <Sparkles className="w-4 h-4 text-teal-600" />
-              <span>Action Today — Refill Reminders</span>
+              <span>Action Today: Refill Reminders</span>
             </h2>
             <p className="text-xs text-slate-500 mt-0.5">
               Patients needing medication replenishment ordered by urgency
@@ -251,43 +251,43 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
 
           {/* Quick Filter Chips */}
-          <div className="flex items-center gap-1.5 flex-wrap">
+          <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
             <button
               onClick={() => setActiveFilter('ACTION_TODAY')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+              className={`px-3 py-1.5 rounded-xl text-xs transition-clinical shadow-2xs active:scale-95 cursor-pointer ${
                 activeFilter === 'ACTION_TODAY'
-                  ? 'bg-teal-600 text-white shadow-xs font-semibold'
-                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  ? 'bg-teal-600 text-white shadow-xs font-bold'
+                  : 'bg-slate-100 text-slate-600 font-semibold hover:bg-slate-200/80 hover:text-slate-900'
               }`}
             >
               Action Today ({actionToday.length})
             </button>
             <button
               onClick={() => setActiveFilter('DUE_5_DAYS')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+              className={`px-3 py-1.5 rounded-xl text-xs transition-clinical shadow-2xs active:scale-95 cursor-pointer ${
                 activeFilter === 'DUE_5_DAYS'
-                  ? 'bg-amber-500 text-white shadow-xs font-semibold'
-                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  ? 'bg-amber-600 text-white shadow-xs font-bold'
+                  : 'bg-slate-100 text-slate-600 font-semibold hover:bg-slate-200/80 hover:text-slate-900'
               }`}
             >
               Due 5 Days ({dueIn5Days.length})
             </button>
             <button
               onClick={() => setActiveFilter('OVERDUE')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+              className={`px-3 py-1.5 rounded-xl text-xs transition-clinical shadow-2xs active:scale-95 cursor-pointer ${
                 activeFilter === 'OVERDUE'
-                  ? 'bg-rose-600 text-white shadow-xs font-semibold'
-                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  ? 'bg-rose-600 text-white shadow-xs font-bold'
+                  : 'bg-slate-100 text-slate-600 font-semibold hover:bg-slate-200/80 hover:text-slate-900'
               }`}
             >
               Overdue ({overdue.length})
             </button>
             <button
               onClick={() => setActiveFilter('PENDING')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+              className={`px-3 py-1.5 rounded-xl text-xs transition-clinical shadow-2xs active:scale-95 cursor-pointer ${
                 activeFilter === 'PENDING'
-                  ? 'bg-slate-800 text-white shadow-xs font-semibold'
-                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  ? 'bg-slate-800 text-white shadow-xs font-bold'
+                  : 'bg-slate-100 text-slate-600 font-semibold hover:bg-slate-200/80 hover:text-slate-900'
               }`}
             >
               All Pending ({reminders.filter(r => r.status === 'pending').length})
@@ -298,10 +298,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         {/* Reminders Table */}
         {filteredReminders.length === 0 ? (
           <div className="p-12 text-center">
-            <div className="w-12 h-12 rounded-full bg-slate-100 text-slate-400 mx-auto flex items-center justify-center mb-3">
-              <CheckCircle2 className="w-6 h-6 text-emerald-500" />
+            <div className="w-12 h-12 rounded-2xl bg-slate-100 text-slate-400 mx-auto flex items-center justify-center mb-3 ring-1 ring-slate-200/80">
+              <CheckCircle2 className="w-6 h-6 text-emerald-600" />
             </div>
-            <h3 className="text-sm font-bold text-slate-800">
+            <h3 className="text-sm font-bold text-slate-900">
               No Pending Reminders for Selected Filter
             </h3>
             <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
@@ -313,15 +313,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             {/* Desktop Table View */}
             <div className="hidden md:block overflow-x-auto">
               <table className="w-full text-left text-xs">
-                <thead className="bg-slate-50 text-slate-500 border-b border-slate-200 font-semibold uppercase text-[11px] tracking-wider">
+                <thead className="bg-slate-50/90 text-slate-500 border-b border-slate-200/90 font-bold uppercase text-[10px] tracking-wider">
                   <tr>
-                    <th className="py-3.5 px-3 w-12 text-center">#</th>
-                    <th className="py-3.5 px-5">Patient Name</th>
-                    <th className="py-3.5 px-4">Contact</th>
-                    <th className="py-3.5 px-4">Due Date</th>
-                    <th className="py-3.5 px-4">Status & Days Left</th>
-                    <th className="py-3.5 px-4">Medicines List</th>
-                    <th className="py-3.5 px-5 text-right">Quick Action</th>
+                    <th className="py-3 px-3 w-12 text-center">#</th>
+                    <th className="py-3 px-5">Patient Name</th>
+                    <th className="py-3 px-4">Contact</th>
+                    <th className="py-3 px-4">Due Date</th>
+                    <th className="py-3 px-4">Status & Days Left</th>
+                    <th className="py-3 px-4">Medicines List</th>
+                    <th className="py-3 px-5 text-right">Quick Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -333,28 +333,28 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     return (
                       <tr
                         key={rem.id}
-                        className="hover:bg-slate-50/80 transition-colors group cursor-pointer"
+                        className="hover:bg-slate-50/75 transition-clinical group cursor-pointer"
                         onClick={() => cust && onSelectCustomer(cust)}
                       >
-                        <td className="py-3.5 px-3 text-center font-mono font-bold text-slate-400">
+                        <td className="py-3.5 px-3 text-center font-mono font-medium text-slate-400 text-[11px] tabular-nums">
                           {idx + 1}
                         </td>
-                        <td className="py-3.5 px-5 font-semibold text-slate-900">
+                        <td className="py-3.5 px-5 font-bold text-slate-900">
                           <div className="flex items-center gap-2">
                             <span>{rem.customerName}</span>
                             {cust?.isMonthlyRegular && (
-                              <span className="w-2 h-2 rounded-full bg-teal-500" title="Monthly Regular Patient"></span>
+                              <span className="w-2 h-2 rounded-full bg-teal-600 ring-2 ring-teal-100" title="Monthly Regular Patient"></span>
                             )}
                           </div>
                         </td>
-                        <td className="py-3.5 px-4 font-mono text-slate-600">
+                        <td className="py-3.5 px-4 font-mono text-slate-600 font-medium tabular-nums">
                           {rem.customerPhone ? (
                             <span>{rem.customerPhone}</span>
                           ) : (
-                            <span className="text-slate-400 italic">No Phone</span>
+                            <span className="text-slate-400 italic font-sans text-[11px]">No Phone</span>
                           )}
                         </td>
-                        <td className="py-3.5 px-4 font-mono text-slate-700">
+                        <td className="py-3.5 px-4 font-mono text-slate-700 font-medium tabular-nums">
                           {rem.dueDate}
                         </td>
                         <td 
@@ -369,40 +369,40 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                             <button
                               type="button"
                               title="Click to select medication dispensed date in calendar"
-                              className="group/cal text-left transition-transform hover:scale-105 focus:outline-none"
+                              className="group/cal text-left transition-clinical focus:outline-none cursor-pointer"
                             >
                               {isOverdue ? (
-                                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-rose-100 text-rose-800 border border-rose-200 hover:bg-rose-200 shadow-2xs">
-                                  <Calendar className="w-3 h-3 text-rose-700 group-hover/cal:scale-110 transition-transform" />
-                                  <span>Overdue by {Math.abs(rem.daysRemaining)}d</span>
+                                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-rose-50 text-rose-700 border border-rose-200/90 hover:bg-rose-100 shadow-2xs">
+                                  <Calendar className="w-3 h-3 text-rose-600" />
+                                  <span className="tabular-nums">Overdue by {Math.abs(rem.daysRemaining)}d</span>
                                 </span>
                               ) : is5Days ? (
-                                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-900 border border-amber-200 hover:bg-amber-200 shadow-2xs">
-                                  <Calendar className="w-3 h-3 text-amber-800 group-hover/cal:scale-110 transition-transform" />
-                                  <span>Due in {rem.daysRemaining}d</span>
+                                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-50 text-amber-800 border border-amber-200/90 hover:bg-amber-100 shadow-2xs">
+                                  <Calendar className="w-3 h-3 text-amber-700" />
+                                  <span className="tabular-nums">Due in {rem.daysRemaining}d</span>
                                 </span>
                               ) : (
-                                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-slate-100 text-slate-700 hover:bg-slate-200 shadow-2xs">
-                                  <Calendar className="w-3 h-3 text-slate-500 group-hover/cal:scale-110 transition-transform" />
-                                  <span>In {rem.daysRemaining} days</span>
+                                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-slate-100 text-slate-700 border border-slate-200 hover:bg-slate-200/80 shadow-2xs">
+                                  <Calendar className="w-3 h-3 text-slate-500" />
+                                  <span className="tabular-nums">In {rem.daysRemaining} days</span>
                                 </span>
                               )}
                             </button>
 
                             {rem.status === 'pending' ? (
-                              <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
-                                <Clock className="w-2.5 h-2.5 text-amber-600" />
+                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200/80">
+                                <Clock className="w-2.5 h-2.5 text-amber-700" />
                                 <span>Pending</span>
                               </span>
                             ) : (
-                              <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
-                                <CheckCircle2 className="w-2.5 h-2.5 text-emerald-600" />
+                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200/80">
+                                <CheckCircle2 className="w-2.5 h-2.5 text-emerald-700" />
                                 <span>Complete</span>
                               </span>
                             )}
                           </div>
                         </td>
-                        <td className="py-3.5 px-4 max-w-xs truncate text-slate-600">
+                        <td className="py-3.5 px-4 max-w-xs truncate text-slate-600 font-medium">
                           {rem.medicinesSummary}
                         </td>
                         <td 
@@ -413,7 +413,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                             onClick={() => handleCall(rem)}
                             title="Call Patient"
                             disabled={!rem.customerPhone}
-                            className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 disabled:opacity-40 transition-colors inline-flex items-center"
+                            className="p-2 rounded-xl bg-slate-50 hover:bg-sky-50 text-slate-700 hover:text-sky-700 border border-slate-200 hover:border-sky-300 disabled:opacity-40 transition-clinical inline-flex items-center shadow-2xs cursor-pointer"
                           >
                             <Phone className="w-3.5 h-3.5 text-teal-600" />
                           </button>
@@ -421,7 +421,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                             onClick={() => handleWhatsApp(rem)}
                             title="Send WhatsApp Reminder"
                             disabled={!rem.customerPhone}
-                            className="p-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 disabled:opacity-40 transition-colors inline-flex items-center"
+                            className="p-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200/90 hover:border-emerald-300 disabled:opacity-40 transition-clinical inline-flex items-center shadow-2xs cursor-pointer"
                           >
                             <MessageSquare className="w-3.5 h-3.5 text-emerald-600" />
                           </button>
@@ -431,7 +431,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                               if (targetCust) setCalendarCustomer(targetCust);
                             }}
                             title="Select dispensed date in calendar"
-                            className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 transition-colors inline-flex items-center"
+                            className="p-2 rounded-xl bg-slate-50 hover:bg-teal-50 text-slate-700 hover:text-teal-700 border border-slate-200 hover:border-teal-300 transition-clinical inline-flex items-center shadow-2xs cursor-pointer"
                           >
                             <Calendar className="w-3.5 h-3.5 text-teal-600" />
                           </button>
@@ -440,7 +440,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                               onMarkRefilled(rem.customerId);
                             }}
                             title="Mark task as Complete (Refilled)"
-                            className="px-2.5 py-1 rounded-lg bg-teal-600 hover:bg-teal-700 text-white font-semibold text-xs shadow-2xs transition-colors inline-flex items-center gap-1"
+                            className="px-3 py-1.5 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-semibold text-xs shadow-xs transition-clinical inline-flex items-center gap-1.5 cursor-pointer"
                           >
                             <CheckCircle2 className="w-3.5 h-3.5" />
                             <span>Complete</span>
@@ -463,32 +463,32 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 return (
                   <div
                     key={rem.id}
-                    className="p-4 hover:bg-slate-50/80 transition-colors space-y-3 cursor-pointer"
+                    className="p-4 hover:bg-slate-50/75 transition-clinical space-y-3 cursor-pointer"
                     onClick={() => cust && onSelectCustomer(cust)}
                   >
                     <div className="flex items-start justify-between gap-2">
                       <div>
                         <div className="flex items-center gap-2">
-                          <span className="text-xs font-mono text-slate-400 font-medium">#{idx + 1}</span>
+                          <span className="text-xs font-mono text-slate-400 font-medium tabular-nums">#{idx + 1}</span>
                           <span className="font-bold text-sm text-slate-900">{rem.customerName}</span>
                           {cust?.isMonthlyRegular && (
-                            <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-teal-50 text-teal-700 border border-teal-200">
+                            <span className="px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-teal-50 text-teal-700 border border-teal-200">
                               Monthly
                             </span>
                           )}
                         </div>
                         <div className="flex items-center gap-2 mt-0.5">
-                          <p className="text-[11px] text-slate-500 font-mono">
+                          <p className="text-[11px] text-slate-500 font-mono tabular-nums">
                             Due: {rem.dueDate}
                           </p>
                           {rem.status === 'pending' ? (
-                            <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
-                              <Clock className="w-2.5 h-2.5 text-amber-600" />
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
+                              <Clock className="w-2.5 h-2.5 text-amber-700" />
                               <span>Pending</span>
                             </span>
                           ) : (
-                            <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
-                              <CheckCircle2 className="w-2.5 h-2.5 text-emerald-600" />
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
+                              <CheckCircle2 className="w-2.5 h-2.5 text-emerald-700" />
                               <span>Complete</span>
                             </span>
                           )}
@@ -503,20 +503,20 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                           const targetCust = cust || customers.find(c => c.id === rem.customerId);
                           if (targetCust) setCalendarCustomer(targetCust);
                         }}
-                        className="text-right focus:outline-none"
+                        className="text-right focus:outline-none transition-clinical cursor-pointer"
                       >
                         {isOverdue ? (
-                          <span className="px-2 py-1 rounded-lg text-[10px] font-bold bg-rose-100 text-rose-800 border border-rose-200 inline-flex items-center gap-1">
-                            <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse"></span>
+                          <span className="px-2 py-1 rounded-lg text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200 inline-flex items-center gap-1 tabular-nums">
+                            <span className="w-1.5 h-1.5 rounded-full bg-rose-600"></span>
                             Overdue {Math.abs(rem.daysRemaining)}d
                           </span>
                         ) : is5Days ? (
-                          <span className="px-2 py-1 rounded-lg text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-200 inline-flex items-center gap-1">
-                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
+                          <span className="px-2 py-1 rounded-lg text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200 inline-flex items-center gap-1 tabular-nums">
+                            <span className="w-1.5 h-1.5 rounded-full bg-amber-600"></span>
                             Due {rem.daysRemaining}d
                           </span>
                         ) : (
-                          <span className="px-2 py-1 rounded-lg text-[10px] font-medium bg-slate-100 text-slate-700 border border-slate-200 inline-flex items-center gap-1">
+                          <span className="px-2 py-1 rounded-lg text-[10px] font-medium bg-slate-100 text-slate-700 border border-slate-200 inline-flex items-center gap-1 tabular-nums">
                             In {rem.daysRemaining}d
                           </span>
                         )}
@@ -524,7 +524,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     </div>
 
                     {/* Medicines preview */}
-                    <p className="text-xs text-slate-600 bg-slate-50 p-2 rounded-lg border border-slate-100 line-clamp-2">
+                    <p className="text-xs text-slate-600 bg-slate-50/80 p-2.5 rounded-xl border border-slate-200/70 line-clamp-2">
                       <span className="font-semibold text-slate-700">Meds: </span>
                       {rem.medicinesSummary}
                     </p>
@@ -536,16 +536,16 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                           onClick={() => handleCall(rem)}
                           title="Call Patient"
                           disabled={!rem.customerPhone}
-                          className="p-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 disabled:opacity-40 transition-colors inline-flex items-center gap-1 text-xs"
+                          className="min-h-[36px] px-2.5 py-1.5 rounded-xl bg-slate-50 hover:bg-sky-50 text-slate-700 border border-slate-200 disabled:opacity-40 transition-clinical inline-flex items-center gap-1 text-xs cursor-pointer"
                         >
                           <Phone className="w-3.5 h-3.5 text-teal-600" />
-                          <span className="font-mono text-[11px]">{rem.customerPhone ? rem.customerPhone.slice(-10) : 'No phone'}</span>
+                          <span className="font-mono text-[11px] tabular-nums">{rem.customerPhone ? rem.customerPhone.slice(-10) : 'No phone'}</span>
                         </button>
                         <button
                           onClick={() => handleWhatsApp(rem)}
                           title="WhatsApp Reminder"
                           disabled={!rem.customerPhone}
-                          className="p-2 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 disabled:opacity-40 transition-colors inline-flex items-center"
+                          className="min-h-[36px] min-w-[36px] p-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 disabled:opacity-40 transition-clinical inline-flex items-center justify-center cursor-pointer"
                         >
                           <MessageSquare className="w-3.5 h-3.5 text-emerald-600" />
                         </button>
@@ -558,14 +558,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                             if (targetCust) setCalendarCustomer(targetCust);
                           }}
                           title="Select exact dispensed date in calendar"
-                          className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 transition-colors inline-flex items-center"
+                          className="min-h-[36px] min-w-[36px] p-2 rounded-xl bg-slate-50 hover:bg-teal-50 text-slate-700 border border-slate-200 transition-clinical inline-flex items-center justify-center cursor-pointer"
                         >
                           <Calendar className="w-3.5 h-3.5 text-teal-600" />
                         </button>
                         <button
                           onClick={() => onMarkRefilled(rem.customerId)}
                           title="Mark task as Complete (Refilled)"
-                          className="px-3 py-1.5 rounded-lg bg-teal-600 hover:bg-teal-700 text-white font-semibold text-xs shadow-2xs transition-colors inline-flex items-center gap-1"
+                          className="min-h-[36px] px-3 py-1.5 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-semibold text-xs shadow-xs transition-clinical inline-flex items-center gap-1 cursor-pointer"
                         >
                           <CheckCircle2 className="w-3.5 h-3.5" />
                           <span>Complete</span>

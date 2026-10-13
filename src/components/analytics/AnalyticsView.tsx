@@ -58,11 +58,11 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
     <div className="space-y-6">
       {/* Top Metric Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="p-5 rounded-2xl bg-white border border-slate-200/80 shadow-2xs">
+        <div className="p-5 rounded-2xl bg-white border border-slate-200/90 shadow-2xs">
           <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
             Total Pharmacy Sales
           </span>
-          <p className="text-2xl font-bold text-slate-900 mt-2 font-mono">
+          <p className="text-2xl font-bold text-slate-900 mt-2 font-mono tabular-nums">
             ₹{totalRevenue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
           </p>
           <p className="text-[11px] text-slate-500 font-medium mt-1">
@@ -70,11 +70,11 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
           </p>
         </div>
 
-        <div className="p-5 rounded-2xl bg-white border border-slate-200/80 shadow-2xs">
+        <div className="p-5 rounded-2xl bg-white border border-slate-200/90 shadow-2xs">
           <span className="text-xs font-semibold text-teal-700 uppercase tracking-wider">
             Monthly Regular Sales
           </span>
-          <p className="text-2xl font-bold text-teal-700 mt-2 font-mono">
+          <p className="text-2xl font-bold text-teal-700 mt-2 font-mono tabular-nums">
             ₹{regularRevenue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
           </p>
           <p className="text-[11px] text-teal-600 font-medium mt-1">
@@ -82,11 +82,11 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
           </p>
         </div>
 
-        <div className="p-5 rounded-2xl bg-white border border-slate-200/80 shadow-2xs">
+        <div className="p-5 rounded-2xl bg-white border border-slate-200/90 shadow-2xs">
           <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
             Customer Retention
           </span>
-          <p className="text-2xl font-bold text-slate-900 mt-2">
+          <p className="text-2xl font-bold text-slate-900 mt-2 font-mono tabular-nums">
             {retentionPercent}%
           </p>
           <p className="text-[11px] text-emerald-600 font-medium mt-1">
@@ -94,11 +94,11 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
           </p>
         </div>
 
-        <div className="p-5 rounded-2xl bg-white border border-slate-200/80 shadow-2xs">
+        <div className="p-5 rounded-2xl bg-white border border-slate-200/90 shadow-2xs">
           <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
             Active Prescriptions
           </span>
-          <p className="text-2xl font-bold text-slate-900 mt-2">
+          <p className="text-2xl font-bold text-slate-900 mt-2 font-mono tabular-nums">
             {medicineFrequency.size}
           </p>
           <p className="text-[11px] text-slate-500 font-medium mt-1">
@@ -109,7 +109,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Top Customers Ranking */}
-        <div className="bg-white border border-slate-200/80 rounded-2xl p-6 shadow-xs">
+        <div className="bg-white border border-slate-200/90 rounded-2xl p-5 sm:p-6 shadow-xs">
           <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2 mb-4">
             <Award className="w-4 h-4 text-amber-500" />
             <span>Top Regular Patients by Spend</span>
@@ -119,18 +119,18 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
             {topCustomers.map((cust, idx) => (
               <div
                 key={cust.id}
-                className="p-3 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-between text-xs"
+                className="p-3 rounded-xl bg-slate-50/60 border border-slate-200/70 hover:bg-slate-50 hover:border-slate-300 transition-colors duration-150 flex items-center justify-between text-xs"
               >
                 <div className="flex items-center gap-3">
                   <span
-                    className={`w-6 h-6 rounded-full flex items-center justify-center font-bold text-[11px] ${
+                    className={`w-6 h-6 rounded-full flex items-center justify-center font-semibold text-[11px] tabular-nums ${
                       idx === 0
-                        ? 'bg-amber-100 text-amber-800'
+                        ? 'bg-amber-50 text-amber-800 border border-amber-200/80'
                         : idx === 1
-                        ? 'bg-slate-200 text-slate-700'
+                        ? 'bg-slate-100 text-slate-700 border border-slate-200/80'
                         : idx === 2
-                        ? 'bg-orange-100 text-orange-800'
-                        : 'bg-slate-100 text-slate-500'
+                        ? 'bg-orange-50 text-orange-800 border border-orange-200/80'
+                        : 'bg-slate-50 text-slate-600 border border-slate-200/60'
                     }`}
                   >
                     #{idx + 1}
@@ -143,10 +143,12 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
                   </div>
                 </div>
                 <div className="text-right">
-                  <span className="font-bold text-slate-900 font-mono">
+                  <span className="font-bold text-slate-900 font-mono tabular-nums">
                     ₹{cust.totalSpend.toFixed(2)}
                   </span>
-                  <span className="block text-[10px] text-teal-600 font-semibold">
+                  <span className={`block text-[10px] font-semibold ${
+                    cust.isMonthlyRegular ? 'text-teal-700' : 'text-slate-500'
+                  }`}>
                     {cust.isMonthlyRegular ? 'Monthly Regular' : 'Occasional'}
                   </span>
                 </div>
@@ -156,7 +158,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
         </div>
 
         {/* Top Prescribed Medicines */}
-        <div className="bg-white border border-slate-200/80 rounded-2xl p-6 shadow-xs">
+        <div className="bg-white border border-slate-200/90 rounded-2xl p-5 sm:p-6 shadow-xs">
           <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2 mb-4">
             <Pill className="w-4 h-4 text-teal-600" />
             <span>Top Prescribed Chronic Medications</span>
@@ -166,10 +168,10 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
             {topMedicines.map((med, idx) => (
               <div
                 key={idx}
-                className="p-3 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-between text-xs"
+                className="p-3 rounded-xl bg-slate-50/60 border border-slate-200/70 hover:bg-slate-50 hover:border-slate-300 transition-colors duration-150 flex items-center justify-between text-xs"
               >
                 <div className="flex items-center gap-3">
-                  <span className="w-6 h-6 rounded-full bg-teal-50 text-teal-700 font-bold text-[11px] flex items-center justify-center">
+                  <span className="w-6 h-6 rounded-full bg-teal-50/70 text-teal-800 border border-teal-200/80 font-semibold text-[11px] flex items-center justify-center tabular-nums">
                     {idx + 1}
                   </span>
                   <div>
@@ -180,7 +182,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
                   </div>
                 </div>
                 <div className="text-right">
-                  <span className="font-bold text-slate-900 font-mono">
+                  <span className="font-bold text-slate-900 font-mono tabular-nums">
                     ₹{med.totalAmount.toFixed(2)}
                   </span>
                   <span className="block text-[10px] text-slate-400">Total Billed</span>

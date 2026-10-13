@@ -38,8 +38,8 @@ export function generateReminders(
   );
 
   targetMonthlyCustomers.forEach(cust => {
-    // Only generate reminders for active monthly customers with medicines and a due date
-    if (!cust.nextDueDate || cust.medicines.length === 0) {
+    // Only generate reminders for active monthly customers with a valid next due date
+    if (!cust.nextDueDate) {
       return;
     }
 
@@ -54,7 +54,10 @@ export function generateReminders(
       urgency = 'UPCOMING';
     }
 
-    const medNames = cust.medicines.map(m => m.name);
+    const medNames = cust.medicines.length > 0
+      ? cust.medicines.map(m => m.name)
+      : [`Prescription Refill (₹${(cust.totalSpend || 0).toFixed(2)})`];
+
     const summary = medNames.length <= 3 
       ? medNames.join(', ')
       : `${medNames.slice(0, 3).join(', ')} + ${medNames.length - 3} more`;

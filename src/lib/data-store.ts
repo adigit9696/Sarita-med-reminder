@@ -3,6 +3,7 @@ import { generateReminders } from './refill-calculator';
 import { deduplicateCustomerList } from './customer-matcher';
 import { 
   syncCustomersToFirestore, 
+  syncMonthlyCustomersToFirestore,
   syncSingleCustomerToFirestore,
   syncMonthlyCustomerToFirestore,
   fetchMonthlyCustomersFromFirestore,
@@ -421,6 +422,7 @@ class DataStoreService {
     this.notify();
 
     if (enrichedBatch) {
+      this.isSyncingWithFirebase = true;
       this.firebaseSyncStatus = 'syncing';
       this.notify();
       try {
@@ -431,15 +433,27 @@ class DataStoreService {
         const touchedIds = new Set(enrichedBatch.customerIds || []);
         const touchedCustomers = this.customers.filter(c => touchedIds.has(c.id));
 
-        // 3. Save only touched customers with explicit authorization flag
+        // 3. Save only touched customers into 'all_customers' collection with explicit authorization flag
         const custOk = await syncCustomersToFirestore(touchedCustomers, {
           caller: 'upload_commit',
           isUploadCommit: true,
         });
 
-        if (batchOk && custOk) {
+        // 4. Identify touched customers who are Monthly Regulars (isMonthlyRegular: true or totalSpend >= 1000)
+        const touchedMonthlyCustomers = touchedCustomers.filter(c => c.isMonthlyRegular || (c.totalSpend && c.totalSpend >= 1000));
+
+        // 5. Automatically save touched monthly customers into separate 'monthly_customers' collection in Firestore
+        let monthlyOk = true;
+        if (touchedMonthlyCustomers.length > 0) {
+          monthlyOk = await syncMonthlyCustomersToFirestore(touchedMonthlyCustomers, {
+            caller: 'upload_commit',
+            isUploadCommit: true,
+          });
+        }
+
+        if (batchOk && custOk && monthlyOk) {
           this.firebaseSyncStatus = 'synced';
-          console.log(`[Firebase] Batch ${enrichedBatch.id} (${enrichedBatch.fileName}) and ${touchedCustomers.length} touched customers successfully saved to Firestore!`);
+          console.log(`[Firebase] Batch ${enrichedBatch.id} (${enrichedBatch.fileName}) with ${touchedCustomers.length} All Customers and ${touchedMonthlyCustomers.length} Monthly Customers successfully saved to Firestore!`);
         } else {
           this.firebaseSyncStatus = 'error';
         }
@@ -447,6 +461,7 @@ class DataStoreService {
         console.error('[Firebase] Error persisting upload commit to Firestore:', err);
         this.firebaseSyncStatus = 'error';
       } finally {
+        this.isSyncingWithFirebase = false;
         this.notify();
       }
     }
@@ -733,6 +748,10 @@ class DataStoreService {
 
       // Authorized restore
       syncCustomersToFirestore(this.customers, { caller: 'restore_backup', isRestore: true }).catch(() => {});
+      const monthlyToRestore = this.customers.filter(c => c.isMonthlyRegular || (c.totalSpend && c.totalSpend >= 1000));
+      if (monthlyToRestore.length > 0) {
+        syncMonthlyCustomersToFirestore(monthlyToRestore, { caller: 'restore_backup', isRestore: true }).catch(() => {});
+      }
       syncBatchesToFirestore(this.batches, 'restore_backup').catch(() => {});
       return true;
     } catch {

@@ -72,29 +72,29 @@ export const CustomerDrawer: React.FC<CustomerDrawerProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 overflow-hidden bg-slate-950/40 backdrop-blur-xs flex justify-end">
-      <div className="w-full max-w-md bg-white h-full shadow-2xl flex flex-col border-l border-slate-200 animate-fadeIn">
+    <div className="fixed inset-0 z-50 overflow-hidden bg-slate-950/70 backdrop-blur-xs flex justify-end">
+      <div className="w-full max-w-md bg-white h-full shadow-2xl flex flex-col border-l border-slate-200/90 transition-clinical">
         {/* Header */}
-        <div className="p-5 border-b border-slate-200 bg-slate-50 flex items-start justify-between">
+        <div className="p-5 border-b border-slate-200/90 bg-slate-50/90 flex items-start justify-between">
           <div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <h2 className="text-base font-bold text-slate-900">
                 {customer.name}
               </h2>
               {customer.isMonthlyRegular && (
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-teal-50 text-teal-700 border border-teal-200">
                   Monthly Regular
                 </span>
               )}
             </div>
             <div className="flex items-center gap-3 text-xs text-slate-500 mt-1">
               {customer.phone ? (
-                <span className="font-mono">{customer.phone}</span>
+                <span className="font-mono font-medium">{customer.phone}</span>
               ) : (
-                <span className="text-slate-400">No phone attached</span>
+                <span className="text-slate-400 italic">No phone attached</span>
               )}
               {customer.code && (
-                <span className="text-[11px] bg-slate-200 text-slate-700 px-1.5 py-0.2 rounded font-mono">
+                <span className="text-[11px] bg-slate-200 text-slate-700 px-1.5 py-0.5 rounded font-mono font-medium">
                   Code: {customer.code}
                 </span>
               )}
@@ -102,18 +102,19 @@ export const CustomerDrawer: React.FC<CustomerDrawerProps> = ({
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 transition-colors"
+            className="p-1.5 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-clinical cursor-pointer"
+            aria-label="Close"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Action Buttons */}
-        <div className="px-5 py-3 border-b border-slate-200 grid grid-cols-2 gap-2 bg-white">
+        <div className="px-5 py-3 border-b border-slate-200/90 grid grid-cols-2 gap-2.5 bg-white">
           <button
             onClick={handleCall}
             disabled={!customer.phone}
-            className="flex items-center justify-center gap-2 py-2 px-3 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-semibold disabled:opacity-50 transition-colors"
+            className="flex items-center justify-center gap-2 py-2 px-3 rounded-xl border border-slate-200 bg-slate-50 hover:bg-sky-50 text-slate-700 hover:text-sky-700 hover:border-sky-300 text-xs font-semibold disabled:opacity-40 transition-clinical shadow-2xs cursor-pointer"
           >
             <Phone className="w-3.5 h-3.5 text-teal-600" />
             <span>Call Patient</span>
@@ -121,7 +122,7 @@ export const CustomerDrawer: React.FC<CustomerDrawerProps> = ({
           <button
             onClick={handleWhatsApp}
             disabled={!customer.phone}
-            className="flex items-center justify-center gap-2 py-2 px-3 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold disabled:opacity-50 transition-colors shadow-xs"
+            className="flex items-center justify-center gap-2 py-2 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold disabled:opacity-40 transition-clinical shadow-xs cursor-pointer"
           >
             <MessageSquare className="w-3.5 h-3.5 text-white" />
             <span>WhatsApp Reminder</span>
@@ -131,23 +132,23 @@ export const CustomerDrawer: React.FC<CustomerDrawerProps> = ({
         {/* Content Body */}
         <div className="flex-1 overflow-y-auto p-5 space-y-5">
           {/* Due Status Card */}
-          <div className="bg-teal-50/70 border border-teal-200/80 rounded-xl p-4">
+          <div className="bg-teal-50/70 border border-teal-200/90 rounded-2xl p-4 shadow-2xs">
             <div className="flex items-center justify-between">
               <div>
-                <span className="text-[11px] font-semibold text-teal-800 uppercase tracking-wider">
+                <span className="text-[10px] font-bold text-teal-800 uppercase tracking-wider">
                   Next Refill Due Date
                 </span>
-                <p className="text-lg font-bold text-teal-950 font-mono mt-0.5">
+                <p className="text-lg font-bold text-teal-950 font-mono mt-0.5 tabular-nums">
                   {customer.nextDueDate || 'Not Calculated'}
                 </p>
-                <p className="text-xs text-teal-700 mt-1">
+                <p className="text-xs text-teal-700 mt-1 font-medium">
                   Alert Window: 5 days prior ({customer.alertDate})
                 </p>
               </div>
               <button
                 onClick={() => setIsCalendarOpen(true)}
                 title="Select exact medication dispensed date in calendar"
-                className="px-3 py-2 bg-teal-600 hover:bg-teal-700 text-white text-xs font-semibold rounded-lg shadow-sm flex items-center gap-1.5 transition-colors"
+                className="px-3.5 py-2 bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold rounded-xl shadow-xs flex items-center gap-1.5 transition-clinical cursor-pointer"
               >
                 <Calendar className="w-4 h-4" />
                 <span>Mark Refilled</span>
@@ -157,7 +158,7 @@ export const CustomerDrawer: React.FC<CustomerDrawerProps> = ({
 
           {/* Regular Prescription Medicines */}
           <div>
-            <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center justify-between mb-2.5">
               <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
                 <Pill className="w-3.5 h-3.5 text-teal-600" />
                 <span>Prescription Medicines ({(customer.medicines || []).length})</span>
@@ -167,7 +168,7 @@ export const CustomerDrawer: React.FC<CustomerDrawerProps> = ({
               {(customer.medicines || []).map((med, idx) => (
                 <div
                   key={med.id || idx}
-                  className="p-3 rounded-xl border border-slate-200 bg-white hover:border-teal-300 transition-colors shadow-2xs"
+                  className="p-3 rounded-xl border border-slate-200/90 bg-white hover:border-teal-300 transition-clinical shadow-2xs"
                 >
                   <div className="flex items-start justify-between">
                     <div>
@@ -230,7 +231,7 @@ export const CustomerDrawer: React.FC<CustomerDrawerProps> = ({
         <div className="p-4 border-t border-slate-200 bg-slate-50 flex items-center justify-between">
           <button
             onClick={onClose}
-            className="w-full py-2 bg-slate-200 hover:bg-slate-300 text-slate-800 font-semibold text-xs rounded-lg transition-colors"
+            className="w-full py-2 bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-800 font-semibold text-xs rounded-xl transition-clinical cursor-pointer"
           >
             Close
           </button>

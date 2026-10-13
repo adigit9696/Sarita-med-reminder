@@ -297,7 +297,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   return (
     <div className="space-y-6 max-w-4xl pb-16">
       {/* Cloud Backup & Store Synchronization Card */}
-      <div className="bg-white border border-slate-200/80 rounded-2xl p-6 shadow-xs space-y-4">
+      <div className="bg-white border border-slate-200/90 rounded-2xl p-5 sm:p-6 shadow-xs space-y-4">
         <div className="flex items-center justify-between flex-wrap gap-2">
           <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
             <Cloud className="w-4 h-4 text-teal-600" />
@@ -307,7 +307,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           <div className="flex items-center gap-2">
             {syncStatus === 'synced' ? (
               <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                <span className="w-2 h-2 rounded-full bg-emerald-600 shrink-0"></span>
                 Cloud Backup Active & Up to Date
               </span>
             ) : syncStatus === 'syncing' || isPushing ? (
@@ -343,7 +343,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           <button
             onClick={handlePushAllToCloud}
             disabled={isPushing || isSyncing}
-            className="px-4 py-2 bg-teal-600 hover:bg-teal-700 active:bg-teal-800 disabled:opacity-50 text-white text-xs font-bold rounded-xl shadow-xs transition-colors flex items-center gap-2 cursor-pointer"
+            className="px-4 py-2 bg-teal-700 hover:bg-teal-800 active:bg-teal-900 disabled:opacity-50 text-white text-xs font-semibold rounded-xl shadow-xs transition-colors duration-150 flex items-center gap-2 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-700 focus-visible:ring-offset-1"
           >
             {isPushing ? (
               <RefreshCw className="w-4 h-4 animate-spin" />
@@ -356,7 +356,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           <button
             onClick={handleRestoreFromCloud}
             disabled={isPushing || isSyncing}
-            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 disabled:opacity-50 text-white text-xs font-bold rounded-xl shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer"
+            className="px-4 py-2 bg-emerald-700 hover:bg-emerald-800 active:bg-emerald-900 disabled:opacity-50 text-white text-xs font-semibold rounded-xl shadow-xs transition-colors duration-150 flex items-center gap-1.5 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-700 focus-visible:ring-offset-1"
             title="Restore all customer records from secure cloud storage into All Customers tab"
           >
             <Download className="w-4 h-4" />
@@ -365,7 +365,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
           <button
             onClick={handleTestConnection}
-            className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold rounded-xl border border-slate-200 transition-colors flex items-center gap-1.5 cursor-pointer"
+            className="px-4 py-2 bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-medium rounded-xl border border-slate-200/90 transition-colors duration-150 flex items-center gap-1.5 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-700"
           >
             <CheckCircle2 className="w-4 h-4 text-slate-600" />
             <span>Check Backup Status</span>
@@ -375,7 +375,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             <button
               onClick={onTriggerSync}
               disabled={isSyncing}
-              className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold rounded-xl border border-slate-200 transition-colors flex items-center gap-1.5 cursor-pointer"
+              className="px-4 py-2 bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-medium rounded-xl border border-slate-200/90 transition-colors duration-150 flex items-center gap-1.5 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-700"
             >
               <RefreshCw className={`w-4 h-4 text-slate-600 ${isSyncing ? 'animate-spin' : ''}`} />
               <span>Refresh Cloud Records</span>
@@ -385,7 +385,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       </div>
 
       {/* Refill Parameters & Audio Alert Card */}
-      <div className="bg-white border border-slate-200/80 rounded-2xl p-6 shadow-xs space-y-4">
+      <div className="bg-white border border-slate-200/90 rounded-2xl p-5 sm:p-6 shadow-xs space-y-4">
         <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
           <Clock className="w-4 h-4 text-teal-600" />
           <span>Refill Cycle & Alert Sound Preferences</span>
@@ -431,9 +431,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         <div className="pt-4 border-t border-slate-100 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <button
+              type="button"
               onClick={() => setAudioEnabled(!audioEnabled)}
-              className={`w-11 h-6 rounded-full transition-colors relative ${
-                audioEnabled ? 'bg-teal-600' : 'bg-slate-300'
+              className={`w-11 h-6 rounded-full transition-colors duration-150 relative cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-700 ${
+                audioEnabled ? 'bg-teal-700' : 'bg-slate-300'
               }`}
             >
               <div
@@ -463,7 +464,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       </div>
 
       {/* WhatsApp Message Template Card */}
-      <div className="bg-white border border-slate-200/80 rounded-2xl p-6 shadow-xs space-y-4">
+      <div className="bg-white border border-slate-200/90 rounded-2xl p-5 sm:p-6 shadow-xs space-y-4">
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
             <MessageSquare className="w-4 h-4 text-teal-600" />
@@ -499,14 +500,14 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
         <button
           onClick={handleSaveParameters}
-          className="px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold rounded-lg shadow-xs transition-colors"
+          className="px-4 py-2 bg-teal-700 hover:bg-teal-800 text-white text-xs font-semibold rounded-xl shadow-xs transition-colors duration-150 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-700 focus-visible:ring-offset-1"
         >
           Save Refill & Notification Settings
         </button>
       </div>
 
       {/* Automated Owner Email Alerts (Serverless Cloud Cron) */}
-      <div className="bg-white border border-slate-200/80 rounded-2xl p-6 shadow-xs space-y-4">
+      <div className="bg-white border border-slate-200/90 rounded-2xl p-5 sm:p-6 shadow-xs space-y-4">
         <div className="flex items-start justify-between gap-4">
           <div>
             <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
@@ -688,7 +689,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       </div>
 
       {/* Staff PIN Security Card */}
-      <div className="bg-white border border-slate-200/80 rounded-2xl p-6 shadow-xs space-y-4">
+      <div className="bg-white border border-slate-200/90 rounded-2xl p-5 sm:p-6 shadow-xs space-y-4">
         <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
           <Shield className="w-4 h-4 text-teal-600" />
           <span>Staff Security & PIN Lock</span>
@@ -730,14 +731,14 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
         <button
           onClick={handlePinChange}
-          className="px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold rounded-lg transition-colors"
+          className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold rounded-xl shadow-xs transition-colors duration-150 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-700 focus-visible:ring-offset-1"
         >
           Change Staff PIN
         </button>
       </div>
 
       {/* Backup & Restore Card */}
-      <div className="bg-white border border-slate-200/80 rounded-2xl p-6 shadow-xs space-y-4">
+      <div className="bg-white border border-slate-200/90 rounded-2xl p-5 sm:p-6 shadow-xs space-y-4">
         <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
           <Download className="w-4 h-4 text-slate-700" />
           <span>Database Backup & Restore</span>
@@ -764,7 +765,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           <button
             type="button"
             onClick={handleStartSafeReset}
-            className="px-3 py-2 text-rose-600 hover:bg-rose-50 text-xs font-semibold rounded-lg border border-rose-200 hover:border-rose-300 transition-colors ml-auto flex items-center gap-1.5 cursor-pointer shadow-2xs"
+            className="px-3.5 py-2 text-rose-700 hover:bg-rose-50 text-xs font-semibold rounded-xl border border-rose-200/90 hover:border-rose-300 transition-colors duration-150 ml-auto flex items-center gap-1.5 cursor-pointer shadow-2xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-700"
           >
             <Trash2 className="w-3.5 h-3.5 text-rose-600" />
             <span>Safe Database Reset / Clear Data</span>
@@ -774,8 +775,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
       {/* Safe Full-Reset Tool Modal (Section 3.3) */}
       {isResetModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs animate-fadeIn">
-          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 space-y-5">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/40 backdrop-blur-xs animate-fadeIn">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-xl border border-slate-200/90 space-y-5">
             {/* Header */}
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
               <div className="flex items-center gap-2.5">
@@ -985,7 +986,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                     type="button"
                     disabled={!resetPin || resetConfirmWord.trim() !== 'DELETE'}
                     onClick={handleExecuteReset}
-                    className="px-4 py-2.5 bg-rose-600 hover:bg-rose-700 active:bg-rose-800 disabled:opacity-40 text-white text-xs font-bold rounded-xl transition-colors cursor-pointer shadow-xs flex items-center gap-2"
+                    className="px-4 py-2.5 bg-rose-700 hover:bg-rose-800 active:bg-rose-900 disabled:opacity-40 text-white text-xs font-semibold rounded-xl transition-colors duration-150 cursor-pointer shadow-xs flex items-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-700 focus-visible:ring-offset-1"
                   >
                     <Trash2 className="w-4 h-4" />
                     <span>Confirm & Execute Database Reset</span>

@@ -18,7 +18,11 @@ import {
   FolderUp, 
   Calendar, 
   Layers,
-  ArrowRight
+  ArrowRight,
+  ChevronDown,
+  ChevronUp,
+  AlertTriangle,
+  ShieldCheck
 } from 'lucide-react';
 import type { Customer, UploadBatch } from '@/types';
 import { parseMargExcel, type ParsedMargBatch } from '@/lib/marg-parser';
@@ -64,6 +68,9 @@ export const BillsAndUploadsView: React.FC<BillsAndUploadsViewProps> = ({
   } | null>(null);
   const [batchToDelete, setBatchToDelete] = useState<UploadBatch | null>(null);
   const [previewData, setPreviewData] = useState<ChronologicalBatchMergeResult | null>(null);
+  const [isDataCheckOpen, setIsDataCheckOpen] = useState(true);
+  const [isNeedsReviewOpen, setIsNeedsReviewOpen] = useState(false);
+  const [isMismatchesOpen, setIsMismatchesOpen] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
@@ -194,6 +201,11 @@ export const BillsAndUploadsView: React.FC<BillsAndUploadsViewProps> = ({
   };
 
   const isMultiFileBatch = Boolean(previewData && previewData.batchesProcessedCount > 1);
+  const priorCommittedBatch = previewData ? batches.find(b => 
+    (b.periodStart && b.periodEnd && b.periodStart === previewData.earliestDate && b.periodEnd === previewData.latestDate) ||
+    (b.originalFileName && b.originalFileName === previewData.consolidatedBatch.originalFileName) ||
+    (b.fileName === previewData.consolidatedBatch.fileName)
+  ) : null;
 
   return (
     <div className="space-y-6">
@@ -218,14 +230,14 @@ export const BillsAndUploadsView: React.FC<BillsAndUploadsViewProps> = ({
       />
 
       {/* Upload Drop Zone Card */}
-      <div className="bg-white border border-slate-200/80 rounded-2xl p-6 shadow-xs">
+      <div className="bg-white border border-slate-200/90 rounded-2xl p-5 sm:p-6 shadow-xs">
         <div className="mb-4">
           <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
             <UploadCloud className="w-5 h-5 text-teal-600" />
             <span>Upload Marg ERP Sales Files or Folder (.XLS / .XLSX / .CSV)</span>
           </h2>
           <p className="text-xs text-slate-500 mt-0.5">
-            Drop an entire folder of daily Marg sheets (e.g. "September"), or select multiple files. The app sorts them chronologically and sets each customer's actual latest purchase date.
+            Drop Marg Bill Wise Sales Statements, monthly summaries, or daily sheets. The app analyzes bills, automatically adds customers with bills ≥ ₹1,000 to "Monthly Customers", and saves all customers in "All Customers".
           </p>
         </div>
 
@@ -236,10 +248,10 @@ export const BillsAndUploadsView: React.FC<BillsAndUploadsViewProps> = ({
           }}
           onDragLeave={() => setIsDragging(false)}
           onDrop={handleDrop}
-          className={`border-2 border-dashed rounded-2xl p-8 text-center transition-all ${
+          className={`border-2 border-dashed rounded-2xl p-6 sm:p-8 text-center transition-colors duration-150 ${
             isDragging
-              ? 'border-teal-500 bg-teal-50/60'
-              : 'border-slate-200 hover:border-teal-400 bg-slate-50/60 hover:bg-slate-50'
+              ? 'border-teal-600 bg-teal-50/50'
+              : 'border-slate-300 hover:border-teal-600/60 bg-slate-50/50 hover:bg-slate-50/90'
           }`}
         >
           <div className="w-12 h-12 rounded-2xl bg-teal-50 text-teal-600 flex items-center justify-center mx-auto mb-3">
@@ -264,17 +276,17 @@ export const BillsAndUploadsView: React.FC<BillsAndUploadsViewProps> = ({
           ) : (
             <>
               <p className="text-sm font-bold text-slate-800">
-                Drop an entire Folder (e.g. "September") or daily Marg Excel files here
+                Drop Marg Bill Wise Sales Statements, daily sheets, or monthly folders here
               </p>
               <p className="text-xs text-slate-500 mt-1 max-w-md mx-auto">
-                Supports single monthly summary sheets, multi-file daily sheets, and full monthly folders
+                Supports single-day sheets (e.g. 01-09.XLS), full month statements (01-09 TO 30-09.XLS), and daily folders
               </p>
 
               <div className="flex items-center justify-center gap-3 mt-4 flex-wrap" onClick={(e) => e.stopPropagation()}>
                 <button
                   type="button"
                   onClick={() => folderInputRef.current?.click()}
-                  className="px-4 py-2 rounded-xl bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold shadow-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+                  className="px-4 py-2 rounded-xl bg-teal-700 hover:bg-teal-800 text-white text-xs font-semibold shadow-xs flex items-center gap-1.5 transition-colors duration-150 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-700 focus-visible:ring-offset-1"
                 >
                   <Folder className="w-4 h-4" />
                   <span>Select Folder (Daily Sheets)</span>
@@ -283,7 +295,7 @@ export const BillsAndUploadsView: React.FC<BillsAndUploadsViewProps> = ({
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
-                  className="px-4 py-2 rounded-xl bg-white hover:bg-slate-100 text-slate-700 text-xs font-semibold border border-slate-300 shadow-2xs flex items-center gap-1.5 transition-colors cursor-pointer"
+                  className="px-4 py-2 rounded-xl bg-white hover:bg-slate-50 text-slate-700 text-xs font-medium border border-slate-200/90 shadow-2xs flex items-center gap-1.5 transition-colors duration-150 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-700 focus-visible:ring-offset-1"
                 >
                   <FileSpreadsheet className="w-4 h-4 text-teal-600" />
                   <span>Select Files (Multi-Select)</span>
@@ -296,7 +308,7 @@ export const BillsAndUploadsView: React.FC<BillsAndUploadsViewProps> = ({
 
       {/* Preview & Customer Matching Card */}
       {previewData && (
-        <div className="bg-white border border-teal-200 rounded-2xl p-6 shadow-sm animate-fadeIn space-y-5">
+        <div className="bg-white border border-teal-200/80 rounded-2xl p-5 sm:p-6 shadow-xs space-y-5">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
             <div>
               <div className="flex items-center gap-2 flex-wrap">
@@ -322,13 +334,13 @@ export const BillsAndUploadsView: React.FC<BillsAndUploadsViewProps> = ({
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setPreviewData(null)}
-                className="px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-100 text-xs font-medium cursor-pointer"
+                className="px-3.5 py-1.5 rounded-xl border border-slate-200/90 text-slate-700 hover:bg-slate-50 text-xs font-medium transition-colors duration-150 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-700"
               >
                 Discard
               </button>
               <button
                 onClick={handleCommit}
-                className="px-4 py-1.5 rounded-lg bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold shadow-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+                className="px-4 py-1.5 rounded-xl bg-teal-700 hover:bg-teal-800 text-white text-xs font-semibold shadow-xs flex items-center gap-1.5 transition-colors duration-150 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-700 focus-visible:ring-offset-1"
               >
                 <CheckCircle2 className="w-4 h-4" />
                 <span>Commit & Add to Database</span>
@@ -336,9 +348,315 @@ export const BillsAndUploadsView: React.FC<BillsAndUploadsViewProps> = ({
             </div>
           </div>
 
+          {/* Warning banner if this file/period was already committed previously */}
+          {priorCommittedBatch && (
+            <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-200 flex items-start gap-3 text-xs text-amber-900">
+              <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+              <div>
+                <p className="font-bold">Period Previously Imported</p>
+                <p className="text-amber-800 text-[11px] mt-0.5">
+                  This sales period was already imported on {new Date(priorCommittedBatch.uploadDate).toLocaleDateString()} (batch &ldquo;{priorCommittedBatch.fileName}&rdquo;). Re-uploading is safe and idempotent: customer information and latest dates are refreshed, but total spend and purchase counts will not be double-counted.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Marg Statement Data Check Panel */}
+          {previewData.dataCheck && (
+            <div className="rounded-xl border border-slate-200/90 bg-slate-50/50 overflow-hidden shadow-2xs">
+              <button
+                type="button"
+                onClick={() => setIsDataCheckOpen(!isDataCheckOpen)}
+                className="w-full p-3.5 bg-white hover:bg-slate-50/70 transition-colors duration-150 flex items-center justify-between text-left cursor-pointer border-b border-slate-200/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-700"
+              >
+                <div className="flex items-center gap-2.5 flex-wrap">
+                  <div className="p-1.5 rounded-lg bg-teal-50 text-teal-700">
+                    <ShieldCheck className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold text-slate-800">
+                        Marg Statement Data Check
+                      </span>
+                      <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 font-semibold border border-slate-200">
+                        {previewData.dataCheck.expectedPeriod} &bull; {previewData.dataCheck.totalDaysFound} of {previewData.dataCheck.expectedDays} days detected
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-500 mt-0.5">
+                      Reconciliation against Marg ERP day totals and summary footer
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold ${
+                    previewData.dataCheck.isBillsCountMatched && previewData.dataCheck.isGrandTotalMatched && previewData.dataCheck.dayMismatches.length === 0
+                      ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                      : 'bg-amber-50 text-amber-700 border border-amber-200'
+                  }`}>
+                    {previewData.dataCheck.isBillsCountMatched && previewData.dataCheck.isGrandTotalMatched && previewData.dataCheck.dayMismatches.length === 0 ? (
+                      <>
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                        <span>100% Reconciled</span>
+                      </>
+                    ) : (
+                      <>
+                        <AlertCircle className="w-3.5 h-3.5 text-amber-600" />
+                        <span>Checks Completed with Warnings</span>
+                      </>
+                    )}
+                  </span>
+                  {isDataCheckOpen ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
+                </div>
+              </button>
+
+              {isDataCheckOpen && (
+                <div className="p-4 space-y-4">
+                  {/* Top 3 Metric Badges */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                    {/* Bills parsed vs footer */}
+                    <div className="p-3 bg-white rounded-xl border border-slate-200/90 shadow-2xs">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-medium text-slate-500">Bills Reconciled</span>
+                        {previewData.dataCheck.isBillsCountMatched ? (
+                          <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                            <CheckCircle2 className="w-3 h-3 text-emerald-600" /> Exact Match
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
+                            <AlertCircle className="w-3 h-3 text-amber-600" /> Mismatch
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-base font-bold text-slate-800 font-mono mt-1">
+                        {previewData.dataCheck.billsParsed.toLocaleString()} / {previewData.dataCheck.footerBills ? previewData.dataCheck.footerBills.toLocaleString() : previewData.dataCheck.billsParsed.toLocaleString()}
+                      </p>
+                      <p className="text-[10px] text-slate-400">
+                        {previewData.dataCheck.billsParsed} parsed vs {previewData.dataCheck.footerBills} in Marg footer
+                      </p>
+                    </div>
+
+                    {/* Grand Total vs footer */}
+                    <div className="p-3 bg-white rounded-xl border border-slate-200/90 shadow-2xs">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-medium text-slate-500">Grand Total Reconciled</span>
+                        {previewData.dataCheck.isGrandTotalMatched ? (
+                          <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                            <CheckCircle2 className="w-3 h-3 text-emerald-600" /> Exact Match
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
+                            <AlertCircle className="w-3 h-3 text-amber-600" /> Mismatch
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-base font-bold text-slate-800 font-mono mt-1">
+                        ₹{previewData.dataCheck.totalAmountParsed.toLocaleString()}
+                      </p>
+                      <p className="text-[10px] text-slate-400">
+                        Footer: ₹{previewData.dataCheck.footerGrandTotal ? previewData.dataCheck.footerGrandTotal.toLocaleString() : previewData.dataCheck.totalAmountParsed.toLocaleString()}
+                      </p>
+                    </div>
+
+                    {/* Per-day reconciliation */}
+                    <div className="p-3 bg-white rounded-xl border border-slate-200/90 shadow-2xs">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-medium text-slate-500">Day Total Reconciliation</span>
+                        {previewData.dataCheck.dayMismatches.length === 0 ? (
+                          <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                            <CheckCircle2 className="w-3 h-3 text-emerald-600" /> Reconciled
+                          </span>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => setIsMismatchesOpen(!isMismatchesOpen)}
+                            className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200 cursor-pointer"
+                          >
+                            <AlertCircle className="w-3 h-3 text-amber-600" /> {previewData.dataCheck.dayMismatches.length} Mismatch(es)
+                          </button>
+                        )}
+                      </div>
+                      <p className="text-base font-bold text-slate-800 font-mono mt-1">
+                        {previewData.dataCheck.totalDaysFound - previewData.dataCheck.dayMismatches.length} of {previewData.dataCheck.totalDaysFound} Days
+                      </p>
+                      <p className="text-[10px] text-slate-400">
+                        Sum of bills exactly equals Marg DAY TOTAL row
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Day Mismatches details if any */}
+                  {previewData.dataCheck.dayMismatches.length > 0 && isMismatchesOpen && (
+                    <div className="p-3 bg-amber-50/60 rounded-lg border border-amber-200 text-xs">
+                      <p className="font-bold text-amber-900 mb-1.5">Day Total Differences:</p>
+                      <div className="space-y-1">
+                        {previewData.dataCheck.dayMismatches.map((m, idx) => (
+                          <div key={idx} className="flex items-center justify-between font-mono text-[11px] text-amber-800">
+                            <span>{m.date} ({m.billCount} bills):</span>
+                            <span>Parsed ₹{m.billSum.toLocaleString()} vs Marg ₹{m.dayTotalInFile.toLocaleString()} (diff: ₹{m.difference.toFixed(2)})</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Bill Classification Breakdown */}
+                  <div>
+                    <h5 className="text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-2">
+                      Bill Classification Breakdown
+                    </h5>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+                      {/* Phone */}
+                      <div className="p-2.5 bg-white rounded-lg border border-slate-200 text-xs">
+                        <span className="text-[10px] font-bold text-teal-800 uppercase block">Phone Bills</span>
+                        <p className="text-sm font-bold text-slate-800 font-mono mt-0.5">
+                          {previewData.dataCheck.classCounts.phone.toLocaleString()}
+                        </p>
+                        <p className="text-[10px] text-slate-500 font-mono">₹{previewData.dataCheck.classCounts.phoneAmount.toLocaleString()}</p>
+                        <p className="text-[9px] text-teal-600 font-semibold mt-1">
+                          {previewData.dataCheck.classCounts.distinctPhones} distinct phones
+                        </p>
+                      </div>
+
+                      {/* Code */}
+                      <div className="p-2.5 bg-white rounded-lg border border-slate-200 text-xs">
+                        <span className="text-[10px] font-bold text-sky-800 uppercase block">Code Bills</span>
+                        <p className="text-sm font-bold text-slate-800 font-mono mt-0.5">
+                          {previewData.dataCheck.classCounts.code.toLocaleString()}
+                        </p>
+                        <p className="text-[10px] text-slate-500 font-mono">₹{previewData.dataCheck.classCounts.codeAmount.toLocaleString()}</p>
+                        <p className="text-[9px] text-sky-600 font-semibold mt-1">
+                          {previewData.dataCheck.classCounts.distinctCodes} distinct codes
+                        </p>
+                      </div>
+
+                      {/* Name Only */}
+                      <div className="p-2.5 bg-white rounded-lg border border-slate-200 text-xs">
+                        <span className="text-[10px] font-bold text-indigo-800 uppercase block">Name Only</span>
+                        <p className="text-sm font-bold text-slate-800 font-mono mt-0.5">
+                          {previewData.dataCheck.classCounts.nameOnly.toLocaleString()}
+                        </p>
+                        <p className="text-[10px] text-slate-500 font-mono">₹{previewData.dataCheck.classCounts.nameOnlyAmount.toLocaleString()}</p>
+                        <p className="text-[9px] text-indigo-600 font-semibold mt-1">
+                          {previewData.dataCheck.classCounts.distinctNames} distinct names
+                        </p>
+                      </div>
+
+                      {/* Unverified */}
+                      <div className="p-2.5 bg-white rounded-lg border border-slate-200 text-xs">
+                        <span className="text-[10px] font-bold text-violet-800 uppercase block">Unverified ID</span>
+                        <p className="text-sm font-bold text-slate-800 font-mono mt-0.5">
+                          {previewData.dataCheck.classCounts.unverified.toLocaleString()}
+                        </p>
+                        <p className="text-[10px] text-slate-500 font-mono">₹{previewData.dataCheck.classCounts.unverifiedAmount.toLocaleString()}</p>
+                        <p className="text-[9px] text-violet-600 font-semibold mt-1">
+                          Kept by customer name
+                        </p>
+                      </div>
+
+                      {/* Walk-in */}
+                      <div className="p-2.5 bg-slate-100 rounded-lg border border-slate-200 text-xs">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] font-bold text-slate-600 uppercase block">Walk-In / Cash</span>
+                        </div>
+                        <p className="text-sm font-bold text-slate-700 font-mono mt-0.5">
+                          {previewData.dataCheck.classCounts.walkIn.toLocaleString()}
+                        </p>
+                        <p className="text-[10px] text-slate-500 font-mono">₹{previewData.dataCheck.classCounts.walkInAmount.toLocaleString()}</p>
+                        <span className="inline-block text-[9px] font-bold text-rose-600 mt-1">
+                          Excluded from customers
+                        </span>
+                      </div>
+
+                      {/* Needs Review */}
+                      <div className="p-2.5 bg-white rounded-lg border border-amber-200 text-xs">
+                        <span className="text-[10px] font-bold text-amber-800 uppercase block">Needs Review</span>
+                        <p className="text-sm font-bold text-amber-900 font-mono mt-0.5">
+                          {previewData.dataCheck.classCounts.needsReview.toLocaleString()}
+                        </p>
+                        <p className="text-[10px] text-slate-500 font-mono">₹{previewData.dataCheck.classCounts.needsReviewAmount.toLocaleString()}</p>
+                        <p className="text-[9px] text-amber-700 font-semibold mt-1">
+                          {previewData.dataCheck.needsReviewList.length} items logged
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Collapsible Needs Review List */}
+                  {previewData.dataCheck.needsReviewList.length > 0 && (
+                    <div className="border border-amber-200 rounded-lg overflow-hidden bg-white">
+                      <button
+                        type="button"
+                        onClick={() => setIsNeedsReviewOpen(!isNeedsReviewOpen)}
+                        className="w-full px-3 py-2 bg-amber-50/60 hover:bg-amber-50 text-left text-xs font-bold text-amber-900 flex items-center justify-between cursor-pointer transition-colors"
+                      >
+                        <div className="flex items-center gap-1.5">
+                          <AlertCircle className="w-3.5 h-3.5 text-amber-600" />
+                          <span>Review Items ({previewData.dataCheck.needsReviewList.length})</span>
+                          <span className="text-[10px] font-normal text-amber-700">
+                            &bull; Special rows, unverified identifiers & phone-only records
+                          </span>
+                        </div>
+                        {isNeedsReviewOpen ? <ChevronUp className="w-3.5 h-3.5 text-amber-700" /> : <ChevronDown className="w-3.5 h-3.5 text-amber-700" />}
+                      </button>
+
+                      {isNeedsReviewOpen && (
+                        <div className="p-2.5 max-h-48 overflow-y-auto space-y-1.5 divide-y divide-slate-100">
+                          {previewData.dataCheck.needsReviewList.map((item, idx) => (
+                            <div key={idx} className="pt-1.5 first:pt-0 flex items-start justify-between gap-2 text-[11px]">
+                              <div>
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <span className="font-mono font-bold text-slate-700">Row {item.rowNum}</span>
+                                  <span className="font-mono text-slate-500">Bill: {item.billNo}</span>
+                                  <span className="px-1.5 py-0.2 rounded text-[9px] font-semibold bg-slate-100 text-slate-700 uppercase">
+                                    {item.reason}
+                                  </span>
+                                  {item.date && (
+                                    <span className="text-[10px] text-slate-400 font-mono">{item.date}</span>
+                                  )}
+                                </div>
+                                <p className="text-slate-600 text-[10px] mt-0.5">
+                                  {item.note}
+                                </p>
+                              </div>
+                              <span className="font-mono font-semibold text-slate-800 shrink-0">
+                                ₹{item.amount.toFixed(2)}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Automatic ₹1,000 Monthly Filtering Highlight */}
+          <div className="p-3.5 rounded-xl bg-teal-50/50 border border-teal-200/90 flex flex-wrap items-center justify-between gap-3 text-xs">
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-teal-600 shrink-0" />
+              <span className="font-bold text-teal-900">
+                Automatic ₹1,000 Filter Applied:
+              </span>
+              <span className="text-teal-700">
+                Customers with bills of ₹1,000 or more are automatically added to Monthly Customers.
+              </span>
+            </div>
+            <div className="flex items-center gap-2 font-mono text-[11px]">
+              <span className="px-2.5 py-1 rounded-lg bg-teal-700 text-white font-semibold shadow-2xs font-mono tabular-nums">
+                {previewData.updatedMasterCustomers.filter(c => c.isMonthlyRegular).length} Monthly (≥ ₹1,000)
+              </span>
+              <span className="px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700 font-medium border border-slate-200/90 font-mono tabular-nums">
+                {previewData.updatedMasterCustomers.filter(c => !c.isMonthlyRegular).length} In All Customers (&lt; ₹1,000)
+              </span>
+            </div>
+          </div>
+
           {/* Analysis Stats Grid */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
-            <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200">
+            <div className="p-3.5 rounded-xl bg-slate-50/60 border border-slate-200/90">
               <span className="text-slate-500 text-[11px] font-medium block">
                 {isMultiFileBatch ? 'Files Processed' : 'Total Customers in File'}
               </span>
@@ -350,7 +668,7 @@ export const BillsAndUploadsView: React.FC<BillsAndUploadsViewProps> = ({
               </p>
             </div>
 
-            <div className="p-3.5 rounded-xl bg-teal-50 border border-teal-200">
+            <div className="p-3.5 rounded-xl bg-teal-50/50 border border-teal-200/90">
               <span className="text-teal-800 text-[11px] font-medium flex items-center gap-1">
                 <Sparkles className="w-3 h-3 text-teal-600" />
                 <span>Repeat Patients Matched</span>
@@ -361,7 +679,7 @@ export const BillsAndUploadsView: React.FC<BillsAndUploadsViewProps> = ({
               <p className="text-[10px] text-teal-700 font-medium">Updated with exact latest bill dates</p>
             </div>
 
-            <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200">
+            <div className="p-3.5 rounded-xl bg-slate-50/60 border border-slate-200/90">
               <span className="text-slate-500 text-[11px] font-medium block">New Patients</span>
               <p className="text-lg font-bold text-emerald-700 mt-0.5">
                 +{previewData.newCustomersCount} Patients
@@ -369,7 +687,7 @@ export const BillsAndUploadsView: React.FC<BillsAndUploadsViewProps> = ({
               <p className="text-[10px] text-slate-500">Stored in All Customers tab</p>
             </div>
 
-            <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200">
+            <div className="p-3.5 rounded-xl bg-slate-50/60 border border-slate-200/90">
               <span className="text-slate-500 text-[11px] font-medium block">Master Directory</span>
               <p className="text-lg font-bold text-slate-900 mt-0.5">
                 {previewData.updatedMasterCustomers.length} Total Patients
@@ -457,8 +775,8 @@ export const BillsAndUploadsView: React.FC<BillsAndUploadsViewProps> = ({
       )}
 
       {/* Upload Batch History */}
-      <div className="bg-white border border-slate-200/80 rounded-2xl shadow-xs overflow-hidden">
-        <div className="p-4 sm:p-5 border-b border-slate-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+      <div className="bg-white border border-slate-200/90 rounded-2xl shadow-xs overflow-hidden">
+        <div className="p-4 sm:p-5 border-b border-slate-200/90 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <div>
             <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
               <Clock className="w-4 h-4 text-slate-600" />
@@ -479,7 +797,7 @@ export const BillsAndUploadsView: React.FC<BillsAndUploadsViewProps> = ({
             {/* Desktop Table View */}
             <div className="hidden md:block overflow-x-auto">
               <table className="w-full text-left text-xs">
-                <thead className="bg-slate-50 text-slate-500 border-b border-slate-200 font-semibold uppercase text-[11px]">
+                <thead className="bg-slate-50/80 text-slate-600 border-b border-slate-200/90 font-semibold uppercase text-[11px] tracking-wider">
                   <tr>
                     <th className="py-3 px-5">Batch / Folder Name</th>
                     <th className="py-3 px-4">Sales Period</th>
@@ -539,7 +857,7 @@ export const BillsAndUploadsView: React.FC<BillsAndUploadsViewProps> = ({
                                 type="button"
                                 onClick={() => downloadNewCustomersFile(b, 'csv')}
                                 title="Download separate CSV containing only new customers from this upload"
-                                className="px-2 py-0.5 rounded bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 text-[10px] font-semibold inline-flex items-center gap-1 transition-colors cursor-pointer"
+                                className="px-2 py-0.5 rounded-md bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200/90 text-[10px] font-medium inline-flex items-center gap-1 transition-colors duration-150 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-700"
                               >
                                 <Download className="w-2.5 h-2.5" />
                                 <span>CSV</span>
@@ -569,7 +887,7 @@ export const BillsAndUploadsView: React.FC<BillsAndUploadsViewProps> = ({
                                   onRollbackBatch(b.id);
                                 }
                               }}
-                              className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-medium border border-slate-200 transition-colors inline-flex items-center gap-1 cursor-pointer"
+                              className="px-2.5 py-1 rounded-lg bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-medium border border-slate-200/90 transition-colors duration-150 inline-flex items-center gap-1 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-700"
                             >
                               <RotateCcw className="w-3 h-3" />
                               <span>Rollback</span>
@@ -578,7 +896,7 @@ export const BillsAndUploadsView: React.FC<BillsAndUploadsViewProps> = ({
                           <button
                             onClick={() => setBatchToDelete(b)}
                             title="Delete this uploaded bill permanently"
-                            className="px-2.5 py-1 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-semibold border border-rose-200 transition-colors inline-flex items-center gap-1 cursor-pointer"
+                            className="px-2.5 py-1 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-800 text-xs font-medium border border-rose-200/90 transition-colors duration-150 inline-flex items-center gap-1 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-700"
                           >
                             <Trash2 className="w-3 h-3 text-rose-600" />
                             <span>Delete Bill</span>

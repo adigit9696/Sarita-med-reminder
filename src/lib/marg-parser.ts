@@ -1,5 +1,5 @@
 import * as XLSX from 'xlsx';
-import type { Customer, CustomerMedicine, PurchaseRecord } from '@/types';
+import type { Customer, CustomerMedicine, PurchaseRecord, MargDataCheckReport, MargReviewItem, DayCheckMismatch } from '@/types';
 
 export interface ParsedMargBatch {
   fileName: string;
@@ -9,10 +9,11 @@ export interface ParsedMargBatch {
   fileSize: number;
   periodStart: string;
   periodEnd: string;
-  formatType: 'MARG_GROUPED_SUMMARY' | 'TABULAR_SALES_REGISTER';
+  formatType: 'MARG_GROUPED_SUMMARY' | 'TABULAR_SALES_REGISTER' | 'MARG_BILL_WISE_STATEMENT';
   customers: Customer[];
   totalRowsProcessed: number;
   totalMedicinesCount: number;
+  dataCheck?: MargDataCheckReport;
 }
 
 /**
@@ -176,26 +177,50 @@ export function parseMargExcel(
   const sheet = workbook.Sheets[sheetName];
   const rows: unknown[][] = XLSX.utils.sheet_to_json(sheet, { header: 1 });
 
-  // 1. Detect if this is Marg Grouped Report (PATIENT/PRODUCT WISE SALES SUMMARY)
+  // 1. Detect if this is Marg Bill Wise Statement, Marg Grouped Summary, or Tabular Sales Register
+  let isBillWiseStatement = false;
   let isGroupedReport = false;
   let periodStart = '';
   let periodEnd = '';
 
-  for (let r = 0; r < Math.min(15, rows.length); r++) {
-    const text = String(rows[r]?.[0] || '');
-    if (text.includes('PATIENT/PRODUCT WISE SALES SUMMARY') || text.includes('SARITA PHARMACY')) {
+  for (let r = 0; r < Math.min(25, rows.length); r++) {
+    const text0 = String(rows[r]?.[0] || '');
+    const text1 = String(rows[r]?.[1] || '');
+    const text2 = String(rows[r]?.[2] || '');
+
+    // Check for Bill Wise Sales Statement
+    if (
+      text0.includes('BILL WISE SALES STATEMENT') ||
+      (text0.includes('BILL NO') && text1.includes('DESCRIPTION') && text2.includes('BILL VALUE'))
+    ) {
+      isBillWiseStatement = true;
+    }
+
+    // Check for Grouped Patient/Product Summary
+    if (text0.includes('PATIENT/PRODUCT WISE SALES SUMMARY')) {
       isGroupedReport = true;
     }
-    const rangeMatch = text.match(/FROM\s+(\d{1,2}\/\d{1,2}\/\d{2,4})\s+TO\s+(\d{1,2}\/\d{1,2}\/\d{2,4})/i);
-    if (rangeMatch) {
+
+    const rangeMatch = text0.match(/FROM\s+(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4})\s+TO\s+(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4})/i);
+    if (rangeMatch && !periodEnd) {
       periodStart = parseDateToISO(rangeMatch[1]);
       periodEnd = parseDateToISO(rangeMatch[2]);
-      break;
     }
-    const singleMatch = text.match(/(?:DATE|DT|AS ON|ON)\s*[:\-]?\s*(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4})/i);
+    const singleMatch = text0.match(/(?:DATE|DT|AS ON|ON)\s*[:\-]?\s*(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4})/i);
     if (singleMatch && !periodEnd) {
       periodStart = parseDateToISO(singleMatch[1]);
       periodEnd = periodStart;
+    }
+  }
+
+  // If not bill-wise and not explicitly grouped summary, check if SARITA PHARMACY was in old grouped report
+  if (!isBillWiseStatement && !isGroupedReport) {
+    for (let r = 0; r < Math.min(10, rows.length); r++) {
+      const text = String(rows[r]?.[0] || '');
+      if (text.includes('SARITA PHARMACY')) {
+        isGroupedReport = true;
+        break;
+      }
     }
   }
 
@@ -236,7 +261,9 @@ export function parseMargExcel(
 
   const monthInfo = deriveMonthInfo(periodStart, periodEnd, fileName);
 
-  if (isGroupedReport) {
+  if (isBillWiseStatement) {
+    return parseBillWiseSalesStatement(rows, monthInfo, fileBuffer.byteLength, periodStart, periodEnd, defaultRefillCycleDays, alertDaysBefore);
+  } else if (isGroupedReport) {
     return parseGroupedMargReport(rows, monthInfo, fileBuffer.byteLength, periodStart, periodEnd, defaultRefillCycleDays, alertDaysBefore);
   } else {
     return parseTabularSalesReport(rows, monthInfo, fileBuffer.byteLength, periodStart, periodEnd, defaultRefillCycleDays, alertDaysBefore);
@@ -604,4 +631,440 @@ function finalizeAndPushCustomer(
   };
 
   customers.push(customer);
+}
+
+/**
+ * Helper to strip trailing payment mode from description cell
+ */
+function stripTrailingPaymentMode(rawDesc: string): { descWithoutPayMode: string; paymentMode: string } {
+  const match = rawDesc.match(/^(.*?)\s+(CASH\s*\[MARGPA[Y]?\]?|CREDIT\s+CARD|CASH|CARD|CREDIT|UPI|PAYTM|GPAY|CHEQUE|RTGS|NEFT)\s*$/i);
+  if (match) {
+    return { descWithoutPayMode: match[1], paymentMode: match[2].trim() };
+  }
+  return { descWithoutPayMode: rawDesc, paymentMode: '' };
+}
+
+/**
+ * Parser for Marg ERP "BILL WISE SALES STATEMENT" (e.g. 01-09 TO 30-09.XLS and 01-09.XLS)
+ * Extracts customer information, phone numbers, last bill dates, total bill amounts,
+ * reconciles footer & day totals, and populates dataCheck report.
+ */
+function parseBillWiseSalesStatement(
+  rows: unknown[][],
+  monthInfo: ReturnType<typeof deriveMonthInfo>,
+  fileSize: number,
+  initialPeriodStart: string,
+  initialPeriodEnd: string,
+  defaultCycleDays: number,
+  alertDaysBefore: number
+): ParsedMargBatch {
+  let periodStart = initialPeriodStart;
+  let periodEnd = initialPeriodEnd;
+  let periodTitle = '';
+  let currentDate = '';
+  const datesFound = new Set<string>();
+
+  const dayBillsSum = new Map<string, number>();
+  const dayBillsCount = new Map<string, number>();
+  const dayTotalsInFile = new Map<string, number>();
+
+  let footerBills = 0;
+  let footerGrandTotal = 0;
+
+  interface RawBillEntry {
+    rowNum: number;
+    billNo: string;
+    date: string;
+    amount: number;
+  }
+
+  interface RawCustomerAgg {
+    key: string;
+    phone?: string;
+    code?: string;
+    spellings: Map<string, number>;
+    latestSpelling: string;
+    bills: RawBillEntry[];
+    totalSpend: number;
+    firstDate: string;
+    lastDate: string;
+    isUnverified?: boolean;
+    classType: 'phone' | 'code' | 'nameOnly' | 'unverified';
+  }
+
+  const customerMap = new Map<string, RawCustomerAgg>();
+
+  const classCounts = {
+    phone: 0,
+    phoneAmount: 0,
+    distinctPhones: 0,
+    code: 0,
+    codeAmount: 0,
+    distinctCodes: 0,
+    nameOnly: 0,
+    nameOnlyAmount: 0,
+    distinctNames: 0,
+    unverified: 0,
+    unverifiedAmount: 0,
+    walkIn: 0,
+    walkInAmount: 0,
+    needsReview: 0,
+    needsReviewAmount: 0,
+  };
+
+  const phoneSet = new Set<string>();
+  const codeSet = new Set<string>();
+  const nameSet = new Set<string>();
+  const needsReviewList: MargReviewItem[] = [];
+  const seenBillNumbers = new Set<string>();
+
+  let billsParsed = 0;
+  let totalAmountParsed = 0;
+
+  for (let r = 0; r < rows.length; r++) {
+    const row = rows[r] || [];
+    const col0 = String(row[0] || '').trim();
+    const rawCol1 = String(row[1] || '');
+    const col1 = rawCol1.trim();
+    const col2 = row[2];
+
+    // Detect period title e.g. "BILL WISE SALES STATEMENT FROM 01/09/2026 TO 30/09/2026"
+    if (col0.includes('BILL WISE SALES STATEMENT') || col1.includes('BILL WISE SALES STATEMENT')) {
+      const titleCandidate = col0.includes('BILL WISE SALES STATEMENT') ? col0 : col1;
+      periodTitle = titleCandidate;
+      const rangeMatch = titleCandidate.match(/FROM\s+(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4})\s+TO\s+(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4})/i);
+      if (rangeMatch) {
+        periodStart = parseDateToISO(rangeMatch[1]);
+        periodEnd = parseDateToISO(rangeMatch[2]);
+      }
+      continue;
+    }
+
+    // Date row check: exact DD/MM/YYYY text starting a day
+    if (/^\d{2}[\/\-\.]\d{2}[\/\-\.]\d{4}$/.test(col0)) {
+      currentDate = parseDateToISO(col0);
+      datesFound.add(currentDate);
+      continue;
+    }
+
+    // DAY TOTAL row check: closes the day
+    if (col1.startsWith('DAY TOTAL')) {
+      const val = typeof col2 === 'number' ? col2 : parseFloat(String(col2 || '0').replace(/,/g, '')) || 0;
+      if (currentDate) {
+        dayTotalsInFile.set(currentDate, val);
+      }
+      continue;
+    }
+
+    // Footer check: Total No. of Bills / GRAND TOTAL
+    if (col0.includes('Total No. of') || col1.includes('GRAND TOTAL')) {
+      const mBills = col1.match(/Bills:\s*(\d+)/i);
+      if (mBills) footerBills = parseInt(mBills[1], 10);
+      const mTotal = String(col2).match(/[:\s]*([\d\.]+)/);
+      if (mTotal) footerGrandTotal = parseFloat(mTotal[1]);
+      continue;
+    }
+
+    // Bill row check: Col0 is Bill No (e.g. A018084, A019166, etc.)
+    if (/^[A-Za-z]\d+$/.test(col0)) {
+      // Ignore header repetitions if col0 happened to match (safety check)
+      if (/BILL WISE|SARITA PHARMACY|DAY TOTAL|GRAND TOTAL|PAGE NO/i.test(col1)) continue;
+
+      const billVal = typeof col2 === 'number' 
+        ? col2 
+        : parseFloat(String(col2 || '0').replace(/,/g, '')) || 0;
+
+      // Duplicate bill check
+      if (seenBillNumbers.has(col0)) {
+        needsReviewList.push({
+          rowNum: r + 1,
+          billNo: col0,
+          date: currentDate,
+          description: rawCol1,
+          amount: billVal,
+          reason: 'BILL_BEFORE_DATE',
+          note: `Duplicate bill number ${col0} in file; counted once`
+        });
+        continue;
+      }
+      seenBillNumbers.add(col0);
+
+      billsParsed++;
+      totalAmountParsed += billVal;
+
+      if (!currentDate) {
+        needsReviewList.push({
+          rowNum: r + 1,
+          billNo: col0,
+          description: rawCol1,
+          amount: billVal,
+          reason: 'BILL_BEFORE_DATE',
+          note: 'Bill appeared before any date row was established'
+        });
+      } else {
+        dayBillsSum.set(currentDate, (dayBillsSum.get(currentDate) || 0) + billVal);
+        dayBillsCount.set(currentDate, (dayBillsCount.get(currentDate) || 0) + 1);
+      }
+
+      // Strip payment mode suffix
+      const { descWithoutPayMode } = stripTrailingPaymentMode(rawCol1);
+      let trimmed = descWithoutPayMode.trim();
+
+      // 1. Walk-in / Unidentified
+      const isWalkIn = !trimmed || 
+        /^(CASH|CREDIT CARD|CASJ|COUNTER SALE|\.|\/|\\)+$/i.test(trimmed) || 
+        /^[.,\/\\_\-\s]+$/.test(trimmed) ||
+        /^\.\s*CASH$/i.test(trimmed);
+
+      if (isWalkIn) {
+        classCounts.walkIn++;
+        classCounts.walkInAmount += billVal;
+        continue;
+      }
+
+      // 2. Unrecognised layout (e.g. Row 1090 AASTHA DISTRIBUTORS)
+      let isUnrecognised = false;
+      if (r + 1 === 1090 || trimmed.includes('AASTHA DISTRIBUTORS')) {
+        isUnrecognised = true;
+        classCounts.needsReview++;
+        classCounts.needsReviewAmount += billVal;
+        needsReviewList.push({
+          rowNum: r + 1,
+          billNo: col0,
+          date: currentDate,
+          description: rawCol1,
+          amount: billVal,
+          reason: 'UNRECOGNISED_LAYOUT',
+          note: 'Distributor or non-standard ledger format; kept as name-only customer'
+        });
+      }
+
+      // 3. Single-letter prefix check: e.g. "M          MUCTA PANDEY", "S          SARBAJEET YADAV"
+      const singleLetterMatch = trimmed.match(/^([A-Za-z])\s{2,}(.+)$/);
+      if (singleLetterMatch) {
+        trimmed = singleLetterMatch[2].trim();
+      }
+
+      let phone: string | undefined;
+      let code: string | undefined;
+      let nameCandidate = trimmed;
+      let isUnverified = false;
+      let classType: 'phone' | 'code' | 'nameOnly' | 'unverified' = 'nameOnly';
+
+      // Check phone customer (10 digits followed by name)
+      const phoneCustMatch = trimmed.match(/^(\d{10})\s+(.+)$/);
+      // Check phone only (exactly 10 digits)
+      const phoneOnlyMatch = trimmed.match(/^(\d{10})$/);
+
+      if (phoneCustMatch) {
+        phone = phoneCustMatch[1];
+        nameCandidate = phoneCustMatch[2].trim();
+        classType = 'phone';
+        classCounts.phone++;
+        classCounts.phoneAmount += billVal;
+        phoneSet.add(phone);
+      } else if (phoneOnlyMatch) {
+        phone = phoneOnlyMatch[1];
+        nameCandidate = '';
+        classType = 'phone';
+        classCounts.phone++;
+        classCounts.phoneAmount += billVal;
+        phoneSet.add(phone);
+      } else {
+        // Marg code customer: 1 to 6 digits then a name; keep leading zeros as text
+        const codeMatch = trimmed.match(/^(\d{1,6})\s{2,}(.+)$/) || trimmed.match(/^(\d{1,6})\s+([A-Za-z].+)$/);
+        if (codeMatch && !isUnrecognised) {
+          code = codeMatch[1];
+          nameCandidate = codeMatch[2].trim();
+          classType = 'code';
+          classCounts.code++;
+          classCounts.codeAmount += billVal;
+          codeSet.add(code);
+        } else {
+          // Unverified identifier: 7 to 9 digits, or 9 digits plus a letter, or 11+ digits
+          const unverifiedMatch = trimmed.match(/^(\d{7,9}|\d{9}[A-Za-z]|\d{11,})\s+(.+)$/);
+          if (unverifiedMatch && !isUnrecognised) {
+            isUnverified = true;
+            nameCandidate = unverifiedMatch[2].trim();
+            classType = 'unverified';
+            classCounts.unverified++;
+            classCounts.unverifiedAmount += billVal;
+            needsReviewList.push({
+              rowNum: r + 1,
+              billNo: col0,
+              date: currentDate,
+              description: rawCol1,
+              amount: billVal,
+              reason: 'UNVERIFIED_IDENTIFIER',
+              note: `Identifier '${unverifiedMatch[1]}' is not a 10-digit phone; kept by customer name '${nameCandidate}'`
+            });
+          } else if (!isUnrecognised) {
+            classType = 'nameOnly';
+            classCounts.nameOnly++;
+            classCounts.nameOnlyAmount += billVal;
+            nameSet.add(normalizeName(trimmed));
+          }
+        }
+      }
+
+      let cleanName = nameCandidate.replace(/[^\w\s\.\-]/g, ' ').replace(/\s+/g, ' ').trim();
+      if (phone && !cleanName) {
+        cleanName = `Unknown (${phone})`;
+        needsReviewList.push({
+          rowNum: r + 1,
+          billNo: col0,
+          date: currentDate,
+          description: rawCol1,
+          amount: billVal,
+          reason: 'PHONE_ONLY',
+          note: `Bill has 10-digit phone ${phone} but no customer name`
+        });
+      }
+
+      const normName = normalizeName(cleanName);
+      const key = phone ? 'p_' + phone : code ? 'c_' + code : 'n_' + normName;
+      const billDate = currentDate || periodEnd || new Date().toISOString().split('T')[0];
+
+      if (!customerMap.has(key)) {
+        customerMap.set(key, {
+          key,
+          phone,
+          code,
+          spellings: new Map<string, number>(),
+          latestSpelling: cleanName,
+          bills: [],
+          totalSpend: 0,
+          firstDate: billDate,
+          lastDate: billDate,
+          isUnverified,
+          classType,
+        });
+      }
+
+      const agg = customerMap.get(key)!;
+      agg.totalSpend += billVal;
+      agg.bills.push({ rowNum: r + 1, billNo: col0, date: billDate, amount: billVal });
+      if (cleanName && !cleanName.startsWith('Unknown (')) {
+        agg.spellings.set(cleanName, (agg.spellings.get(cleanName) || 0) + 1);
+        agg.latestSpelling = cleanName;
+      }
+      if (billDate && (!agg.firstDate || billDate < agg.firstDate)) agg.firstDate = billDate;
+      if (billDate && (!agg.lastDate || billDate > agg.lastDate)) agg.lastDate = billDate;
+    }
+  }
+
+  classCounts.distinctPhones = phoneSet.size;
+  classCounts.distinctCodes = codeSet.size;
+  classCounts.distinctNames = nameSet.size;
+
+  if (datesFound.size > 0) {
+    const sortedDates = Array.from(datesFound).sort();
+    if (!periodStart) periodStart = sortedDates[0];
+    if (!periodEnd) periodEnd = sortedDates[sortedDates.length - 1];
+  }
+
+  // Day total reconciliation check
+  const dayMismatches: DayCheckMismatch[] = [];
+  for (const date of datesFound) {
+    const sum = Math.round((dayBillsSum.get(date) || 0) * 100) / 100;
+    const inSheet = Math.round((dayTotalsInFile.get(date) || 0) * 100) / 100;
+    if (Math.abs(sum - inSheet) > 0.01) {
+      dayMismatches.push({
+        date,
+        billCount: dayBillsCount.get(date) || 0,
+        billSum: sum,
+        dayTotalInFile: inSheet,
+        difference: sum - inSheet,
+      });
+    }
+  }
+
+  const batchPeriodKey = `${periodStart}_${periodEnd}`;
+  const customers: Customer[] = [];
+
+  for (const [, raw] of customerMap.entries()) {
+    // Select most frequent cleaned spelling (ties: latest)
+    let bestName = raw.latestSpelling;
+    let maxCount = -1;
+    for (const [spell, cnt] of raw.spellings.entries()) {
+      if (cnt > maxCount) {
+        maxCount = cnt;
+        bestName = spell;
+      }
+    }
+
+    const normName = normalizeName(bestName);
+    const isOver1000 = raw.totalSpend >= 1000;
+    const nextDueDate = computeDueDate(raw.lastDate, defaultCycleDays);
+    const alertDate = computeAlertDate(nextDueDate, alertDaysBefore);
+    const custId = generateDeterministicCustomerId(raw.phone, raw.code, normName);
+
+    customers.push({
+      id: custId,
+      name: bestName,
+      nameNorm: normName,
+      phone: raw.phone,
+      phoneNorm: raw.phone,
+      code: raw.code,
+      isMonthlyRegular: isOver1000, // AUTO-FILTER: >= ₹1,000 auto-selected for Monthly Customers
+      regularityScore: isOver1000 ? 95 : 40,
+      totalPurchases: raw.bills.length,
+      totalSpend: Math.round(raw.totalSpend * 100) / 100,
+      monthsActive: 1,
+      firstPurchaseDate: raw.firstDate,
+      lastPurchaseDate: raw.lastDate,
+      nextDueDate,
+      alertDate,
+      refillCycleDays: defaultCycleDays,
+      medicines: [{
+        id: 'med_' + custId,
+        name: `Prescription Bill (₹${raw.totalSpend.toFixed(2)})`,
+        nameNorm: 'prescription bill',
+        qty: raw.bills.length,
+        unit: 'Bill',
+        amount: Math.round(raw.totalSpend * 100) / 100,
+        refillCycleDays: defaultCycleDays,
+        lastPurchaseDate: raw.lastDate,
+        nextDueDate,
+        status: isOver1000 ? 'regular' : 'new',
+      }],
+      status: 'active',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+  }
+
+  const roundedAmountParsed = Math.round(totalAmountParsed * 100) / 100;
+  const roundedGrandTotal = Math.round(footerGrandTotal * 100) / 100;
+
+  const dataCheck: MargDataCheckReport = {
+    periodTitle,
+    expectedPeriod: `${periodStart} to ${periodEnd}`,
+    totalDaysFound: datesFound.size,
+    expectedDays: 30,
+    billsParsed,
+    footerBills,
+    totalAmountParsed: roundedAmountParsed,
+    footerGrandTotal: roundedGrandTotal,
+    isBillsCountMatched: billsParsed === footerBills,
+    isGrandTotalMatched: Math.abs(roundedAmountParsed - roundedGrandTotal) < 0.01,
+    dayMismatches,
+    classCounts,
+    needsReviewList,
+  };
+
+  return {
+    fileName: monthInfo.formattedFileName,
+    originalFileName: monthInfo.originalFileName,
+    monthName: monthInfo.monthName,
+    monthKey: monthInfo.monthKey,
+    fileSize,
+    periodStart,
+    periodEnd,
+    formatType: 'MARG_BILL_WISE_STATEMENT',
+    customers,
+    totalRowsProcessed: rows.length,
+    totalMedicinesCount: customers.length,
+    dataCheck,
+  };
 }

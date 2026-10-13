@@ -122,9 +122,9 @@ export const EditCustomerModal: React.FC<EditCustomerModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-4">
-      <div className="w-full max-w-2xl bg-white rounded-2xl shadow-2xl border border-slate-200 flex flex-col max-h-[90vh] overflow-hidden animate-fadeIn">
+      <div className="w-full max-w-2xl bg-white rounded-2xl shadow-xl border border-slate-200/90 flex flex-col max-h-[90vh] overflow-hidden transition-clinical">
         {/* Header */}
-        <div className="p-5 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
+        <div className="p-5 border-b border-slate-200/90 bg-slate-50/90 flex items-center justify-between">
           <div>
             <h3 className="font-bold text-base text-slate-900">
               Edit Patient & Prescription Information
@@ -135,7 +135,7 @@ export const EditCustomerModal: React.FC<EditCustomerModalProps> = ({
           </div>
           <button
             onClick={onClose}
-            className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-200 transition-colors"
+            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-clinical cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
@@ -152,7 +152,7 @@ export const EditCustomerModal: React.FC<EditCustomerModalProps> = ({
                 required
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-200 p-2 rounded-lg text-slate-900 focus:bg-white focus:border-teal-500"
+                className="w-full bg-slate-50 border border-slate-200/90 p-2 rounded-xl text-slate-900 focus:bg-white focus:border-teal-600 focus:ring-1 focus:ring-teal-600 transition-clinical"
               />
             </div>
 
@@ -164,7 +164,7 @@ export const EditCustomerModal: React.FC<EditCustomerModalProps> = ({
                 placeholder="9876543210"
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-200 p-2 rounded-lg text-slate-900 font-mono focus:bg-white focus:border-teal-500"
+                className="w-full bg-slate-50 border border-slate-200/90 p-2 rounded-xl text-slate-900 font-mono focus:bg-white focus:border-teal-600 focus:ring-1 focus:ring-teal-600 transition-clinical"
               />
             </div>
 
@@ -175,7 +175,7 @@ export const EditCustomerModal: React.FC<EditCustomerModalProps> = ({
                 placeholder="0006"
                 value={code}
                 onChange={(e) => setCode(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-200 p-2 rounded-lg text-slate-900 font-mono focus:bg-white focus:border-teal-500"
+                className="w-full bg-slate-50 border border-slate-200/90 p-2 rounded-xl text-slate-900 font-mono focus:bg-white focus:border-teal-600 focus:ring-1 focus:ring-teal-600 transition-clinical"
               />
             </div>
 
@@ -186,7 +186,7 @@ export const EditCustomerModal: React.FC<EditCustomerModalProps> = ({
                 placeholder="House / Street / Area"
                 value={address}
                 onChange={(e) => setAddress(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-200 p-2 rounded-lg text-slate-900 focus:bg-white focus:border-teal-500"
+                className="w-full bg-slate-50 border border-slate-200/90 p-2 rounded-xl text-slate-900 focus:bg-white focus:border-teal-600 focus:ring-1 focus:ring-teal-600 transition-clinical"
               />
             </div>
           </div>
@@ -214,7 +214,7 @@ export const EditCustomerModal: React.FC<EditCustomerModalProps> = ({
                   key={opt.days}
                   type="button"
                   onClick={() => setRefillCycleDays(opt.days)}
-                  className={`py-1.5 px-2 rounded-lg text-xs font-bold transition-all text-center border ${
+                  className={`py-1.5 px-2 rounded-xl text-xs font-bold transition-clinical text-center border cursor-pointer ${
                     refillCycleDays === opt.days
                       ? 'bg-teal-600 text-white border-teal-600 shadow-xs'
                       : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
@@ -420,13 +420,13 @@ export const EditCustomerModal: React.FC<EditCustomerModalProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 text-xs font-medium"
+              className="px-4 py-2 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 text-xs font-semibold transition-clinical cursor-pointer"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="px-5 py-2 rounded-xl bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold shadow-xs transition-colors flex items-center gap-1.5"
+              className="px-5 py-2 rounded-xl bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold shadow-xs transition-clinical flex items-center gap-1.5 cursor-pointer"
             >
               <Save className="w-4 h-4" />
               <span>Save Changes</span>

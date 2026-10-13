@@ -235,7 +235,7 @@ export const AppShell: React.FC = () => {
       />
 
       {/* Main Content Area */}
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="flex-1 flex flex-col min-w-0 bg-slate-50/70">
         <TopBar
           searchQuery={searchQuery}
           onSearchChange={(q) => {
@@ -256,7 +256,7 @@ export const AppShell: React.FC = () => {
           onOpenMobileMenu={() => setIsMobileMenuOpen(true)}
         />
 
-        <main className="flex-1 p-3 sm:p-6 pb-24 md:pb-8 max-w-7xl w-full mx-auto">
+        <main className="flex-1 p-3 sm:p-6 lg:p-8 pb-24 md:pb-10 max-w-7xl w-full mx-auto">
           {activeTab === 'dashboard' && (
             <DashboardView
               customers={customers}

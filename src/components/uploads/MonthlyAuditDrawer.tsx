@@ -51,7 +51,7 @@ class MonthlyAuditErrorBoundary extends Component<ErrorBoundaryProps, ErrorBound
   render() {
     if (this.state.hasError) {
       return (
-        <div className="fixed inset-0 z-50 overflow-hidden bg-slate-950/70 backdrop-blur-xs flex justify-end">
+        <div className="fixed inset-0 z-50 overflow-hidden bg-slate-950/40 backdrop-blur-xs flex justify-end">
           <div className="w-full max-w-xl bg-white h-full shadow-2xl flex flex-col p-6 space-y-4 justify-center items-center text-center">
             <div className="w-14 h-14 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center border border-rose-200">
               <AlertTriangle className="w-7 h-7" />
@@ -265,7 +265,7 @@ const MonthlyAuditDrawerInner: React.FC<MonthlyAuditDrawerProps> = ({
                 <h2 className="text-base sm:text-lg font-bold text-slate-900">
                   Monthly Audit & Customer Discount Tracker
                 </h2>
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-teal-100 text-teal-800 border border-teal-200">
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-teal-50 text-teal-800 border border-teal-200/90">
                   Cross-Reference
                 </span>
               </div>
@@ -546,7 +546,7 @@ const MonthlyAuditDrawerInner: React.FC<MonthlyAuditDrawerProps> = ({
                       </span>
                       {filterType === 'MISSING' && (
                         <span className="text-rose-700 font-bold flex items-center gap-1">
-                          <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse"></span>
+                          <span className="w-2 h-2 rounded-full bg-rose-600"></span>
                           Priority Outreach for Refill Confirmation
                         </span>
                       )}
@@ -571,10 +571,10 @@ const MonthlyAuditDrawerInner: React.FC<MonthlyAuditDrawerProps> = ({
                             key={cust.id || `item_${idx}`}
                             className={`p-4 rounded-2xl border transition-all ${
                               isMissing
-                                ? 'bg-rose-50/90 border-rose-300 shadow-xs hover:border-rose-400'
+                                ? 'bg-rose-50/60 border-rose-200/90 shadow-2xs hover:border-rose-300'
                                 : isRetained
-                                ? 'bg-white border-slate-200/80 hover:border-slate-300'
-                                : 'bg-sky-50/40 border-sky-200/80 hover:border-sky-300'
+                                ? 'bg-white border-slate-200/90 hover:border-slate-300 shadow-2xs'
+                                : 'bg-sky-50/30 border-sky-200/80 hover:border-sky-300 shadow-2xs'
                             }`}
                           >
                             <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
@@ -590,17 +590,17 @@ const MonthlyAuditDrawerInner: React.FC<MonthlyAuditDrawerProps> = ({
 
                                   {/* DISTINCT BADGE COLOR FOR MISSING */}
                                   {isMissing ? (
-                                    <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-rose-200 text-rose-900 border border-rose-300 inline-flex items-center gap-1">
+                                    <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-rose-50 text-rose-800 border border-rose-200/90 inline-flex items-center gap-1">
                                       <AlertTriangle className="w-2.5 h-2.5 text-rose-700" />
                                       Missing This Month
                                     </span>
                                   ) : isRetained ? (
-                                    <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-100 text-emerald-800 border border-emerald-200 inline-flex items-center gap-1">
+                                    <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200/90 inline-flex items-center gap-1">
                                       <CheckCircle2 className="w-2.5 h-2.5 text-emerald-600" />
                                       Retained Regular
                                     </span>
                                   ) : (
-                                    <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-sky-100 text-sky-800 border border-sky-200 inline-flex items-center gap-1">
+                                    <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-sky-50 text-sky-800 border border-sky-200/90 inline-flex items-center gap-1">
                                       <UserPlus className="w-2.5 h-2.5 text-sky-600" />
                                       New Discount Customer
                                     </span>
@@ -615,7 +615,7 @@ const MonthlyAuditDrawerInner: React.FC<MonthlyAuditDrawerProps> = ({
 
                                 <div className="flex items-center gap-3 text-xs text-slate-600 flex-wrap">
                                   {item.customerCode && (
-                                    <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-700 font-mono font-bold text-[11px] border border-slate-200">
+                                    <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 font-mono font-medium text-[11px] border border-slate-200/90 tabular-nums">
                                       Marg Party Code: {item.customerCode}
                                     </span>
                                   )}
@@ -673,10 +673,10 @@ const MonthlyAuditDrawerInner: React.FC<MonthlyAuditDrawerProps> = ({
                                 <button
                                   onClick={() => onToggleMonthly(cust.id, !cust.isMonthlyRegular)}
                                   title={cust.isMonthlyRegular ? 'Remove from Monthly Roster' : 'Add to Monthly Roster for daily countdown tracking'}
-                                  className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors duration-150 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-700 ${
                                     cust.isMonthlyRegular
-                                      ? 'bg-teal-600 text-white shadow-2xs hover:bg-teal-700'
-                                      : 'bg-white border border-slate-300 text-slate-700 hover:border-teal-500 hover:text-teal-700'
+                                      ? 'bg-teal-700 text-white shadow-2xs hover:bg-teal-800'
+                                      : 'bg-white border border-slate-200/90 text-slate-700 hover:border-teal-600 hover:text-teal-700 shadow-2xs'
                                   }`}
                                 >
                                   {cust.isMonthlyRegular ? (
@@ -698,7 +698,7 @@ const MonthlyAuditDrawerInner: React.FC<MonthlyAuditDrawerProps> = ({
                                     onClick={() => handleCall(item)}
                                     disabled={!item.contactPhone && !cust.phone && !cust.phoneNorm}
                                     title="Call Patient"
-                                    className="p-2 rounded-xl bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 disabled:opacity-40 transition-colors shadow-2xs cursor-pointer"
+                                    className="p-2 rounded-xl bg-white border border-slate-200/90 text-slate-700 hover:bg-slate-50 disabled:opacity-40 transition-colors duration-150 shadow-2xs cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-700"
                                   >
                                     <Phone className="w-3.5 h-3.5 text-teal-600" />
                                   </button>
@@ -706,7 +706,7 @@ const MonthlyAuditDrawerInner: React.FC<MonthlyAuditDrawerProps> = ({
                                     onClick={() => handleWhatsAppOutreach(item)}
                                     disabled={!item.contactPhone && !cust.phone && !cust.phoneNorm}
                                     title="Send WhatsApp Follow-up regarding missing chronic refill"
-                                    className="p-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-40 transition-colors shadow-2xs cursor-pointer"
+                                    className="p-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-40 transition-colors duration-150 shadow-2xs cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-700"
                                   >
                                     <MessageSquare className="w-3.5 h-3.5" />
                                   </button>
@@ -725,14 +725,14 @@ const MonthlyAuditDrawerInner: React.FC<MonthlyAuditDrawerProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="p-4 border-t border-slate-200 bg-slate-50 flex items-center justify-between text-xs text-slate-500">
+        <div className="p-4 border-t border-slate-200/90 bg-slate-50/80 flex items-center justify-between text-xs text-slate-500">
           <div className="flex items-center gap-1.5">
             <Sparkles className="w-3.5 h-3.5 text-teal-600" />
             <span>All discount customer profiles are saved permanently in 'All Customers' master list.</span>
           </div>
           <button
             onClick={onClose}
-            className="px-4 py-2 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold transition-colors cursor-pointer"
+            className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium transition-colors duration-150 cursor-pointer border border-slate-200/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-700"
           >
             Close
           </button>

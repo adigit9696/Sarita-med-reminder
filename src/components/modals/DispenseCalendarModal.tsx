@@ -104,10 +104,10 @@ export const DispenseCalendarModal: React.FC<DispenseCalendarModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-4">
-      <div className="w-full max-w-lg bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden animate-fadeIn">
+    <div className="fixed inset-0 z-50 bg-slate-950/40 backdrop-blur-xs flex items-center justify-center p-4">
+      <div className="w-full max-w-lg bg-white rounded-2xl shadow-xl border border-slate-200/90 overflow-hidden animate-fadeIn">
         {/* Header */}
-        <div className="p-5 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
+        <div className="p-4 sm:p-5 border-b border-slate-200/90 bg-slate-50/80 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-teal-50 text-teal-700 flex items-center justify-center border border-teal-200 shrink-0">
               <Calendar className="w-5 h-5" />
@@ -123,7 +123,7 @@ export const DispenseCalendarModal: React.FC<DispenseCalendarModalProps> = ({
           </div>
           <button
             onClick={onClose}
-            className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-200 transition-colors"
+            className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors duration-150 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-700"
           >
             <X className="w-5 h-5" />
           </button>
@@ -132,7 +132,7 @@ export const DispenseCalendarModal: React.FC<DispenseCalendarModalProps> = ({
         {/* Form Body */}
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
           {/* Customer Summary Card */}
-          <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between text-xs">
+          <div className="p-3.5 rounded-xl bg-slate-50/60 border border-slate-200/90 flex items-center justify-between text-xs">
             <div>
               <span className="font-bold text-slate-900 text-sm block">
                 {customer.name}
@@ -157,7 +157,7 @@ export const DispenseCalendarModal: React.FC<DispenseCalendarModalProps> = ({
                 required
                 value={dispensedDate}
                 onChange={(e) => setDispensedDate(e.target.value)}
-                className="w-full bg-slate-50 border-2 border-teal-500/80 p-2.5 rounded-xl text-slate-900 font-medium text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-teal-500"
+                className="w-full bg-slate-50/80 border border-teal-600/70 p-2.5 rounded-xl text-slate-900 font-medium text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-700 font-mono tabular-nums"
               />
             </div>
 
@@ -167,10 +167,10 @@ export const DispenseCalendarModal: React.FC<DispenseCalendarModalProps> = ({
               <button
                 type="button"
                 onClick={() => handleQuickSelect(0)}
-                className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-colors ${
+                className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors duration-150 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-700 ${
                   dispensedDate === todayStr 
-                    ? 'bg-teal-600 text-white' 
-                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                    ? 'bg-teal-700 text-white font-semibold shadow-2xs' 
+                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200/80'
                 }`}
               >
                 Today
@@ -178,21 +178,21 @@ export const DispenseCalendarModal: React.FC<DispenseCalendarModalProps> = ({
               <button
                 type="button"
                 onClick={() => handleQuickSelect(1)}
-                className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
+                className="px-2.5 py-1 rounded-lg text-xs font-medium bg-slate-100 text-slate-700 hover:bg-slate-200/80 transition-colors duration-150 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-700"
               >
                 Yesterday
               </button>
               <button
                 type="button"
                 onClick={() => handleQuickSelect(2)}
-                className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
+                className="px-2.5 py-1 rounded-lg text-xs font-medium bg-slate-100 text-slate-700 hover:bg-slate-200/80 transition-colors duration-150 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-700"
               >
                 2 Days Ago
               </button>
               <button
                 type="button"
                 onClick={() => handleQuickSelect(3)}
-                className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
+                className="px-2.5 py-1 rounded-lg text-xs font-medium bg-slate-100 text-slate-700 hover:bg-slate-200/80 transition-colors duration-150 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-700"
               >
                 3 Days Ago
               </button>
@@ -222,10 +222,10 @@ export const DispenseCalendarModal: React.FC<DispenseCalendarModalProps> = ({
                   key={opt.days}
                   type="button"
                   onClick={() => setCycleDays(opt.days)}
-                  className={`py-2 px-1 rounded-xl text-xs font-bold transition-all text-center border ${
+                  className={`py-2 px-1 rounded-xl text-xs font-semibold transition-colors duration-150 text-center border cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-700 ${
                     cycleDays === opt.days
-                      ? 'bg-teal-600 text-white border-teal-600 shadow-xs'
-                      : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                      ? 'bg-teal-700 text-white border-teal-700 shadow-2xs'
+                      : 'bg-slate-50/70 text-slate-700 border-slate-200/90 hover:bg-slate-100'
                   }`}
                 >
                   {opt.label}
@@ -247,7 +247,7 @@ export const DispenseCalendarModal: React.FC<DispenseCalendarModalProps> = ({
                     const val = parseInt(e.target.value);
                     setCycleDays(isNaN(val) ? 0 : val);
                   }}
-                  className="w-full bg-slate-50 border border-slate-300 p-2 pr-14 rounded-xl text-slate-900 font-bold text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-teal-500 font-mono"
+                  className="w-full bg-slate-50/70 border border-slate-200/90 p-2 pr-14 rounded-xl text-slate-900 font-bold text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-700 font-mono tabular-nums"
                   placeholder="e.g. 15, 30, 45"
                 />
                 <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-slate-400 pointer-events-none">
@@ -258,13 +258,13 @@ export const DispenseCalendarModal: React.FC<DispenseCalendarModalProps> = ({
           </div>
 
           {/* Next Cycle Timeline Preview */}
-          <div className="p-4 rounded-xl bg-teal-50/70 border border-teal-200 text-xs space-y-2.5">
+          <div className="p-4 rounded-xl bg-teal-50/50 border border-teal-200/80 text-xs space-y-2.5">
             <h4 className="font-bold text-teal-950 uppercase tracking-wider text-[11px] flex items-center gap-1.5">
               <Clock className="w-3.5 h-3.5 text-teal-600" />
               <span>Calculated Reminder Schedule:</span>
             </h4>
             <div className="grid grid-cols-2 gap-3 text-slate-700">
-              <div className="bg-white p-2.5 rounded-lg border border-teal-100">
+              <div className="bg-white p-2.5 rounded-xl border border-teal-200/80 shadow-2xs">
                 <span className="text-[10px] text-slate-500 font-medium block">Next Refill Due Date:</span>
                 <span className="font-mono font-bold text-slate-900 text-xs mt-0.5 block">
                   {nextDueDate || '—'}
@@ -273,7 +273,7 @@ export const DispenseCalendarModal: React.FC<DispenseCalendarModalProps> = ({
                   ({activeCycle} days cycle)
                 </span>
               </div>
-              <div className="bg-white p-2.5 rounded-lg border border-teal-100">
+              <div className="bg-white p-2.5 rounded-xl border border-teal-200/80 shadow-2xs">
                 <span className="text-[10px] text-slate-500 font-medium block">Alert Mode Starts:</span>
                 <span className="font-mono font-bold text-amber-700 text-xs mt-0.5 block">
                   {alertDate || '—'}
@@ -308,13 +308,13 @@ export const DispenseCalendarModal: React.FC<DispenseCalendarModalProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 text-xs font-medium"
+              className="px-4 py-2 rounded-xl border border-slate-200/90 text-slate-700 hover:bg-slate-50 text-xs font-medium transition-colors duration-150 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-700"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="px-5 py-2 rounded-xl bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold shadow-xs transition-colors flex items-center gap-1.5"
+              className="px-5 py-2 rounded-xl bg-teal-700 hover:bg-teal-800 text-white text-xs font-semibold shadow-xs transition-colors duration-150 flex items-center gap-1.5 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-700 focus-visible:ring-offset-1"
             >
               <CheckCircle2 className="w-4 h-4" />
               <span>Confirm & Set Countdown</span>

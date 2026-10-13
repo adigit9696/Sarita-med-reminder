@@ -199,6 +199,74 @@ export async function syncCustomersToFirestore(
   }
 }
 
+/**
+ * Dedicated Firestore Batch Save for "Monthly Customers":
+ * Saves customer records into the dedicated 'monthly_customers' collection in Firestore.
+ * Strictly guarded: Any call attempting > 10 docs without explicit authorization is aborted.
+ */
+export async function syncMonthlyCustomersToFirestore(
+  customers: Customer[], 
+  options: SyncCustomersOptions = {}
+): Promise<boolean> {
+  const db = getFirebaseDb();
+  if (!db) {
+    console.warn('Cannot sync monthly customers: Firestore DB not initialized');
+    return false;
+  }
+
+  if (!Array.isArray(customers) || customers.length === 0) {
+    return true;
+  }
+
+  const caller = options.caller || 'unknown';
+  const isAuthorizedBulk = options.isUploadCommit || options.isRestore || options.isResetTool;
+
+  if (customers.length > 10 && !isAuthorizedBulk) {
+    const errorMsg = `[Firestore Safety Guard] BLOCKED unauthorized bulk write of ${customers.length} monthly customers by caller '${caller}'.`;
+    console.error(errorMsg);
+    throw new Error(errorMsg);
+  }
+
+  try {
+    const uniqueMap = new Map<string, Customer>();
+    customers.forEach(cust => {
+      if (!cust || !cust.name) return;
+      const safeId = String(cust.id || '').replace(/[\/\s]/g, '_') || 'cust_' + Math.random().toString(36).slice(2);
+      uniqueMap.set(safeId, { ...cust, id: safeId, isMonthlyRegular: true });
+    });
+
+    const uniqueCustomers = Array.from(uniqueMap.values());
+    console.log(`[Firestore Write] caller=${caller}, collection=monthly_customers, docCount=${uniqueCustomers.length}`);
+
+    const chunkSize = 25;
+    for (let i = 0; i < uniqueCustomers.length; i += chunkSize) {
+      const chunk = uniqueCustomers.slice(i, i + chunkSize);
+      const batch = writeBatch(db);
+
+      chunk.forEach(cust => {
+        const cleanCust = JSON.parse(JSON.stringify(cust));
+        const payload = {
+          ...cleanCust,
+          id: cust.id,
+          isMonthlyRegular: true,
+          addedToMonthlyAt: new Date().toISOString(),
+          syncedAt: new Date().toISOString(),
+        };
+
+        const monthlyCustRef = doc(db, 'monthly_customers', cust.id);
+        batch.set(monthlyCustRef, payload, { merge: true });
+      });
+
+      await batch.commit();
+    }
+
+    return true;
+  } catch (err) {
+    console.error('[Firebase] Error syncing monthly customers to Firestore:', err);
+    return false;
+  }
+}
+
 export async function syncSingleCustomerToFirestore(
   customer: Customer, 
   caller: string = 'single_update'

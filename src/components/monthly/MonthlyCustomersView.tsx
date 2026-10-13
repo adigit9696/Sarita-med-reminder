@@ -133,16 +133,16 @@ export const MonthlyCustomersView: React.FC<MonthlyCustomersViewProps> = ({
   return (
     <div className="space-y-6">
       {/* Header Banner */}
-      <div className="bg-white border border-slate-200/80 rounded-2xl p-4 sm:p-6 shadow-xs flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+      <div className="bg-white border border-slate-200/90 rounded-2xl p-4 sm:p-6 shadow-xs flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2 flex-wrap">
-            <div className="w-8 h-8 rounded-lg bg-teal-50 text-teal-600 flex items-center justify-center shrink-0">
+            <div className="w-8 h-8 rounded-lg bg-teal-50 text-teal-700 border border-teal-100 flex items-center justify-center shrink-0">
               <CalendarClock className="w-4 h-4" />
             </div>
-            <h2 className="text-base sm:text-lg font-bold text-slate-900">
+            <h2 className="text-base sm:text-lg font-bold text-slate-900 tracking-tight">
               Monthly Customers Directory
             </h2>
-            <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-teal-100 text-teal-800 border border-teal-200">
+            <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-teal-50 text-teal-700 border border-teal-200 tabular-nums">
               {monthlyCustomers.length} Regular Patients
             </span>
           </div>
@@ -160,13 +160,13 @@ export const MonthlyCustomersView: React.FC<MonthlyCustomersViewProps> = ({
               placeholder="Search monthly patient or med..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full bg-slate-50 border border-slate-200 pl-8 pr-3 py-2 rounded-xl text-xs focus:bg-white focus:border-teal-500 transition-all"
+              className="w-full bg-slate-50 border border-slate-200/90 pl-9 pr-3 py-2 rounded-xl text-xs text-slate-900 placeholder-slate-400 focus:bg-white focus:border-teal-600 focus:ring-1 focus:ring-teal-600 transition-clinical shadow-2xs"
             />
           </div>
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value as unknown as typeof statusFilter)}
-            className="bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl text-xs font-medium text-slate-700 focus:border-teal-500"
+            className="bg-slate-50 border border-slate-200/90 px-3 py-2 rounded-xl text-xs font-semibold text-slate-800 focus:bg-white focus:border-teal-600 focus:ring-1 focus:ring-teal-600 transition-clinical shadow-2xs cursor-pointer"
           >
             <option value="ALL">All ({monthlyCustomers.length})</option>
             <option value="DUE_SOON">Alert Mode ({alertModeCount})</option>
@@ -177,11 +177,11 @@ export const MonthlyCustomersView: React.FC<MonthlyCustomersViewProps> = ({
       </div>
 
       {/* Monthly Customers List */}
-      <div className="bg-white border border-slate-200/80 rounded-2xl shadow-xs overflow-hidden">
+      <div className="bg-white border border-slate-200/90 rounded-2xl shadow-xs overflow-hidden">
         {sorted.length === 0 ? (
           <div className="p-12 text-center">
             <CalendarClock className="w-10 h-10 text-slate-300 mx-auto mb-3" />
-            <h3 className="text-sm font-bold text-slate-800">
+            <h3 className="text-sm font-bold text-slate-900">
               {monthlyCustomers.length === 0 
                 ? 'No Monthly Customers Selected Yet' 
                 : 'No Customers Match Search Criteria'}
@@ -197,15 +197,15 @@ export const MonthlyCustomersView: React.FC<MonthlyCustomersViewProps> = ({
             {/* Desktop Table View */}
             <div className="hidden lg:block overflow-x-auto">
               <table className="w-full text-left text-xs">
-                <thead className="bg-slate-50 text-slate-500 border-b border-slate-200 font-semibold uppercase text-[11px] tracking-wider">
+                <thead className="bg-slate-50/90 text-slate-500 border-b border-slate-200/90 font-bold uppercase text-[10px] tracking-wider sticky top-0 z-10">
                   <tr>
-                    <th className="py-3.5 px-3 w-12 text-center">#</th>
-                    <th className="py-3.5 px-5">Customer Name & Code</th>
-                    <th className="py-3.5 px-4">Contact Number</th>
-                    <th className="py-3.5 px-4">Regular Medications</th>
-                    <th className="py-3.5 px-4">Last Bill Date</th>
-                    <th className="py-3.5 px-4">Next Refill Date</th>
-                    <th className="py-3.5 px-5 text-right">Action</th>
+                    <th className="py-3 px-3 w-12 text-center">#</th>
+                    <th className="py-3 px-5">Customer Name & Code</th>
+                    <th className="py-3 px-4">Contact Number</th>
+                    <th className="py-3 px-4">Regular Medications</th>
+                    <th className="py-3 px-4">Last Bill Date</th>
+                    <th className="py-3 px-4">Next Refill Date</th>
+                    <th className="py-3 px-5 text-right">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -220,15 +220,15 @@ export const MonthlyCustomersView: React.FC<MonthlyCustomersViewProps> = ({
                       <tr
                         key={cust.id}
                         onClick={() => onSelectCustomer(cust)}
-                        className={`transition-colors cursor-pointer group ${
+                        className={`transition-clinical cursor-pointer group ${
                           isMissing
-                            ? 'bg-rose-50/70 border-l-4 border-l-rose-500 hover:bg-rose-100/60'
+                            ? 'bg-rose-50/60 border-l-4 border-l-rose-500 hover:bg-rose-100/50'
                             : isComplete
-                            ? 'bg-slate-50/40 opacity-90 hover:bg-slate-50/80'
-                            : 'hover:bg-slate-50/80'
+                            ? 'bg-slate-50/30 opacity-90 hover:bg-slate-50/70'
+                            : 'hover:bg-slate-50/75'
                         }`}
                       >
-                        <td className="py-3.5 px-3 text-center text-slate-400 font-mono font-medium text-xs">
+                        <td className="py-3.5 px-3 text-center text-slate-400 font-mono font-medium text-xs tabular-nums">
                           {idx + 1}
                         </td>
                         <td className="py-3.5 px-5">
@@ -237,43 +237,53 @@ export const MonthlyCustomersView: React.FC<MonthlyCustomersViewProps> = ({
                               {cust.name}
                             </span>
                             {isMissing && (
-                              <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-rose-100 text-rose-700 border border-rose-200">
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200 shadow-2xs">
                                 Missing since {previousMonthLabel || 'last month'}
                               </span>
                             )}
                           </div>
                           {cust.code && (
-                            <span className="text-[10px] text-slate-400 font-mono block">
+                            <span className="text-[10px] text-slate-400 font-mono block font-medium tabular-nums">
                               Marg Code: {cust.code}
                             </span>
                           )}
                         </td>
-                        <td className="py-3.5 px-4 font-mono text-slate-700">
+                        <td className="py-3.5 px-4 font-mono text-slate-700 tabular-nums">
                           {cust.phone ? (
                             <span className="font-semibold">{cust.phone}</span>
                           ) : (
-                            <span className="text-slate-400 italic">No Phone</span>
+                            <span className="text-slate-400 italic font-sans text-[11px]">No Phone</span>
                           )}
                         </td>
                         <td className="py-3.5 px-4 max-w-sm">
-                          <div className="flex flex-wrap gap-1">
-                            {cust.medicines.slice(0, 3).map((m, i) => (
-                              <span
-                                key={i}
-                                className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 text-[11px] border border-slate-200/60 truncate max-w-[150px]"
-                                title={m.name}
-                              >
-                                {m.name}
-                              </span>
-                            ))}
-                            {cust.medicines.length > 3 && (
-                              <span className="px-1.5 py-0.5 rounded-md bg-teal-50 text-teal-700 text-[10px] font-bold">
-                                +{cust.medicines.length - 3} more
-                              </span>
-                            )}
-                          </div>
+                          {cust.medicines.length === 0 ? (
+                            <span className="text-slate-600 font-mono text-[11px] font-medium tabular-nums">
+                              ₹{cust.totalSpend.toFixed(2)} (Last Bill)
+                            </span>
+                          ) : cust.medicines.length === 1 && cust.medicines[0].name.startsWith('Prescription Bill') ? (
+                            <span className="px-2 py-0.5 rounded-md bg-teal-50 text-teal-700 font-semibold text-[11px] border border-teal-200 inline-block tabular-nums">
+                              Prescription Bill (₹{cust.totalSpend.toFixed(2)})
+                            </span>
+                          ) : (
+                            <div className="flex flex-wrap gap-1">
+                              {cust.medicines.slice(0, 3).map((m, i) => (
+                                <span
+                                  key={i}
+                                  className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 text-[11px] font-medium border border-slate-200/80 truncate max-w-[150px]"
+                                  title={m.name}
+                                >
+                                  {m.name}
+                                </span>
+                              ))}
+                              {cust.medicines.length > 3 && (
+                                <span className="px-1.5 py-0.5 rounded-md bg-teal-50 text-teal-700 text-[10px] font-bold">
+                                  +{cust.medicines.length - 3} more
+                                </span>
+                              )}
+                            </div>
+                          )}
                         </td>
-                        <td className="py-3.5 px-4 font-mono text-slate-600">
+                        <td className="py-3.5 px-4 font-mono text-slate-600 font-medium tabular-nums">
                           {cust.lastPurchaseDate || 'N/A'}
                         </td>
                         <td 
@@ -286,23 +296,23 @@ export const MonthlyCustomersView: React.FC<MonthlyCustomersViewProps> = ({
                           <button
                             type="button"
                             title="Click to select exact medication dispensed date in calendar"
-                            className="group/cal text-left transition-transform hover:scale-[1.02] focus:outline-none flex flex-col sm:flex-row sm:items-center gap-1.5"
+                            className="group/cal text-left transition-clinical focus:outline-none flex flex-col sm:flex-row sm:items-center gap-1.5 cursor-pointer"
                           >
-                            <span className="font-mono font-bold text-slate-900 text-xs">
+                            <span className="font-mono font-bold text-slate-900 text-xs tabular-nums">
                               {cust.nextDueDate || 'Not set'}
                             </span>
                             {isOverdue ? (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800 border border-rose-200 shadow-2xs">
-                                <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse"></span>
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200/90 shadow-2xs tabular-nums">
+                                <span className="w-1.5 h-1.5 rounded-full bg-rose-600"></span>
                                 Overdue {Math.abs(days)}d
                               </span>
                             ) : isAlertMode ? (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-200 shadow-2xs animate-pulse-subtle">
-                                <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200/90 shadow-2xs tabular-nums">
+                                <span className="w-1.5 h-1.5 rounded-full bg-amber-600"></span>
                                 Due in {days}d
                               </span>
                             ) : (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 text-slate-600 border border-slate-200">
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 text-slate-700 border border-slate-200 tabular-nums">
                                 In {days}d
                               </span>
                             )}
@@ -316,7 +326,7 @@ export const MonthlyCustomersView: React.FC<MonthlyCustomersViewProps> = ({
                             onClick={(e) => handleCall(cust, e)}
                             title="Phone Call"
                             disabled={!cust.phone}
-                            className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 disabled:opacity-40 transition-colors inline-flex items-center"
+                            className="p-2 rounded-xl bg-slate-50 hover:bg-sky-50 text-slate-700 hover:text-sky-700 border border-slate-200 hover:border-sky-300 disabled:opacity-40 transition-clinical inline-flex items-center shadow-2xs cursor-pointer"
                           >
                             <Phone className="w-3.5 h-3.5 text-teal-600" />
                           </button>
@@ -324,16 +334,16 @@ export const MonthlyCustomersView: React.FC<MonthlyCustomersViewProps> = ({
                             onClick={(e) => handleWhatsApp(cust, e)}
                             title="Send WhatsApp Refill Alert"
                             disabled={!cust.phone}
-                            className="p-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 disabled:opacity-40 transition-colors inline-flex items-center"
+                            className="p-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200/90 hover:border-emerald-300 disabled:opacity-40 transition-clinical inline-flex items-center shadow-2xs cursor-pointer"
                           >
                             <MessageSquare className="w-3.5 h-3.5 text-emerald-600" />
                           </button>
                           <button
                             onClick={(e) => handleRefillClick(cust.id, e)}
                             title="Mark Refilled Today"
-                            className="px-2.5 py-1 rounded-lg bg-teal-600 hover:bg-teal-700 text-white font-medium text-xs shadow-2xs transition-colors inline-flex items-center gap-1 cursor-pointer"
+                            className="px-3 py-1.5 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-semibold text-xs shadow-xs transition-clinical inline-flex items-center gap-1.5 cursor-pointer"
                           >
-                            <CheckCircle2 className="w-3 h-3" />
+                            <CheckCircle2 className="w-3.5 h-3.5" />
                             <span>Refilled</span>
                           </button>
                         </td>
@@ -357,27 +367,27 @@ export const MonthlyCustomersView: React.FC<MonthlyCustomersViewProps> = ({
                   <div
                     key={cust.id}
                     onClick={() => onSelectCustomer(cust)}
-                    className={`p-4 transition-colors cursor-pointer space-y-3 ${
+                    className={`p-4 transition-clinical cursor-pointer space-y-3 ${
                       isMissing
-                        ? 'bg-rose-50/70 border-l-4 border-l-rose-500 hover:bg-rose-100/60'
+                        ? 'bg-rose-50/60 border-l-4 border-l-rose-500 hover:bg-rose-100/50'
                         : isComplete 
-                        ? 'bg-slate-50/40 opacity-90 hover:bg-slate-50/80' 
-                        : 'hover:bg-slate-50/80'
+                        ? 'bg-slate-50/30 opacity-90 hover:bg-slate-50/70' 
+                        : 'hover:bg-slate-50/75'
                     }`}
                   >
                     <div className="flex items-start justify-between gap-2">
                       <div>
                         <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-xs font-mono text-slate-400 font-medium">#{idx + 1}</span>
+                          <span className="text-xs font-mono text-slate-400 font-medium tabular-nums">#{idx + 1}</span>
                           <span className="font-bold text-sm text-slate-900">{cust.name}</span>
                           {isMissing && (
-                            <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-rose-100 text-rose-700 border border-rose-200">
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
                               Missing since {previousMonthLabel || 'last month'}
                             </span>
                           )}
                         </div>
                         {cust.code && (
-                          <span className="text-[10px] text-slate-400 font-mono block">Marg: {cust.code}</span>
+                          <span className="text-[10px] text-slate-400 font-mono block tabular-nums">Marg: {cust.code}</span>
                         )}
                       </div>
 
@@ -388,21 +398,21 @@ export const MonthlyCustomersView: React.FC<MonthlyCustomersViewProps> = ({
                           e.stopPropagation();
                           setCalendarCustomer(cust);
                         }}
-                        className="text-right focus:outline-none"
+                        className="text-right focus:outline-none transition-clinical cursor-pointer"
                       >
                         {isOverdue ? (
-                          <span className="px-2 py-1 rounded-lg text-[10px] font-bold bg-rose-100 text-rose-800 border border-rose-200 inline-flex items-center gap-1">
-                            <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse"></span>
+                          <span className="px-2 py-1 rounded-lg text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200 inline-flex items-center gap-1 tabular-nums">
+                            <span className="w-1.5 h-1.5 rounded-full bg-rose-600"></span>
                             Overdue {Math.abs(days)}d
                           </span>
                         ) : isAlertMode ? (
-                          <span className="px-2 py-1 rounded-lg text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-200 inline-flex items-center gap-1">
-                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
+                          <span className="px-2 py-1 rounded-lg text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200 inline-flex items-center gap-1 tabular-nums">
+                            <span className="w-1.5 h-1.5 rounded-full bg-amber-600"></span>
                             Due {days}d
                           </span>
                         ) : (
-                          <span className="px-2 py-1 rounded-lg text-[10px] font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200 inline-flex items-center gap-1">
-                            <CheckCircle2 className="w-2.5 h-2.5 text-emerald-600" />
+                          <span className="px-2 py-1 rounded-lg text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200 inline-flex items-center gap-1 tabular-nums">
+                            <CheckCircle2 className="w-2.5 h-2.5 text-emerald-700" />
                             Refill {days}d
                           </span>
                         )}
@@ -411,18 +421,30 @@ export const MonthlyCustomersView: React.FC<MonthlyCustomersViewProps> = ({
 
                     {/* Medicines snippet */}
                     <div className="flex flex-wrap gap-1">
-                      {cust.medicines.slice(0, 3).map((m, i) => (
-                        <span
-                          key={i}
-                          className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 text-[11px] border border-slate-200/60 truncate max-w-[140px]"
-                        >
-                          {m.name}
+                      {cust.medicines.length === 0 ? (
+                        <span className="text-slate-600 font-mono text-[11px] tabular-nums">
+                          ₹{cust.totalSpend.toFixed(2)} (Last Bill)
                         </span>
-                      ))}
-                      {cust.medicines.length > 3 && (
-                        <span className="px-1.5 py-0.5 rounded-md bg-teal-50 text-teal-700 text-[10px] font-bold">
-                          +{cust.medicines.length - 3} more
+                      ) : cust.medicines.length === 1 && cust.medicines[0].name.startsWith('Prescription Bill') ? (
+                        <span className="px-2 py-0.5 rounded-md bg-teal-50 text-teal-700 font-semibold text-[11px] border border-teal-200 tabular-nums">
+                          Prescription Bill (₹{cust.totalSpend.toFixed(2)})
                         </span>
+                      ) : (
+                        <>
+                          {cust.medicines.slice(0, 3).map((m, i) => (
+                            <span
+                              key={i}
+                              className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 text-[11px] border border-slate-200/80 truncate max-w-[140px]"
+                            >
+                              {m.name}
+                            </span>
+                          ))}
+                          {cust.medicines.length > 3 && (
+                            <span className="px-1.5 py-0.5 rounded-md bg-teal-50 text-teal-700 text-[10px] font-bold">
+                              +{cust.medicines.length - 3} more
+                            </span>
+                          )}
+                        </>
                       )}
                     </div>
 
@@ -433,16 +455,16 @@ export const MonthlyCustomersView: React.FC<MonthlyCustomersViewProps> = ({
                           onClick={(e) => handleCall(cust, e)}
                           title="Phone Call"
                           disabled={!cust.phone}
-                          className="p-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 disabled:opacity-40 transition-colors inline-flex items-center gap-1 text-xs"
+                          className="min-h-[36px] px-2.5 py-1.5 rounded-xl bg-slate-50 hover:bg-sky-50 text-slate-700 border border-slate-200 disabled:opacity-40 transition-clinical inline-flex items-center gap-1 text-xs cursor-pointer"
                         >
                           <Phone className="w-3.5 h-3.5 text-teal-600" />
-                          <span className="font-mono text-[11px]">{cust.phone ? cust.phone.slice(-10) : 'No phone'}</span>
+                          <span className="font-mono text-[11px] tabular-nums">{cust.phone ? cust.phone.slice(-10) : 'No phone'}</span>
                         </button>
                         <button
                           onClick={(e) => handleWhatsApp(cust, e)}
                           title="WhatsApp Reminder"
                           disabled={!cust.phone}
-                          className="p-2 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 disabled:opacity-40 transition-colors inline-flex items-center"
+                          className="min-h-[36px] min-w-[36px] p-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 disabled:opacity-40 transition-clinical inline-flex items-center justify-center cursor-pointer"
                         >
                           <MessageSquare className="w-3.5 h-3.5 text-emerald-600" />
                         </button>
@@ -451,15 +473,15 @@ export const MonthlyCustomersView: React.FC<MonthlyCustomersViewProps> = ({
                       {isComplete ? (
                         <button
                           onClick={() => setCalendarCustomer(cust)}
-                          className="px-3 py-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-300 font-medium text-xs shadow-2xs transition-colors inline-flex items-center gap-1.5"
+                          className="min-h-[36px] px-3 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 font-semibold text-xs shadow-2xs transition-clinical inline-flex items-center gap-1.5 cursor-pointer"
                         >
-                          <Calendar className="w-3.5 h-3.5 text-emerald-600" />
+                          <Calendar className="w-3.5 h-3.5 text-emerald-700" />
                           <span>Complete</span>
                         </button>
                       ) : (
                         <button
                           onClick={() => setCalendarCustomer(cust)}
-                          className="px-3 py-1.5 rounded-lg bg-teal-600 hover:bg-teal-700 text-white font-medium text-xs shadow-2xs transition-colors inline-flex items-center gap-1.5"
+                          className="min-h-[36px] px-3 py-1.5 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-semibold text-xs shadow-xs transition-clinical inline-flex items-center gap-1.5 cursor-pointer"
                         >
                           <Calendar className="w-3.5 h-3.5" />
                           <span>Refilled</span>

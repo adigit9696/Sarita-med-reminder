@@ -1,41 +1,98 @@
 @import "tailwindcss";
 
 :root {
-  --font-sans: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-sans: var(--font-sans), 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  
+  /* Primary Clinical Brand Tokens */
+  --primary-teal: #0d9488;
+  --primary-teal-dark: #0f766e;
+  --primary-teal-light: #14b8a6;
+  --primary-surface: #f0fdfa;
+  
+  /* Calibrated Semantic Status Tokens (WCAG AA Compliant) */
+  --status-overdue: #dc2626;
+  --status-overdue-bg: #fef2f2;
+  --status-overdue-border: #fecaca;
+  
+  --status-due-soon: #d97706;
+  --status-due-soon-bg: #fffbeb;
+  --status-due-soon-border: #fde68a;
+  
+  --status-refilled: #059669;
+  --status-refilled-bg: #ecfdf5;
+  --status-refilled-border: #a7f3d0;
+  
+  --status-upcoming: #0284c7;
+  --status-upcoming-bg: #f0f9ff;
+  --status-upcoming-border: #bae6fd;
+  
+  /* Coherent Neutral Tokens */
+  --neutral-bg: #f8fafc;
+  --neutral-surface: #ffffff;
+  --neutral-border: #e2e8f0;
+  --neutral-text-main: #0f172a;
+  --neutral-text-muted: #64748b;
+  --neutral-text-subtle: #94a3b8;
+
+  /* Elevation Shadows (Layered hairline) */
+  --shadow-hairline: 0 1px 2px 0 rgb(0 0 0 / 0.04);
+  --shadow-card: 0 1px 3px 0 rgb(0 0 0 / 0.05), 0 1px 2px -1px rgb(0 0 0 / 0.05);
+  --shadow-overlay: 0 4px 6px -1px rgb(0 0 0 / 0.07), 0 2px 4px -2px rgb(0 0 0 / 0.05);
+}
+
+* {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 body {
   font-family: var(--font-sans);
-  background-color: #f8fafc;
-  color: #0f172a;
+  background-color: var(--neutral-bg);
+  color: var(--neutral-text-main);
+  letter-spacing: -0.011em;
 }
 
-/* Animations */
-@keyframes pulseSubtle {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.85; transform: scale(1.02); }
+/* Accessibility: Universal Focus Visible Ring */
+*:focus-visible {
+  outline: 2px solid var(--primary-teal) !important;
+  outline-offset: 2px !important;
 }
 
-@keyframes bellRing {
-  0%, 100% { transform: rotate(0); }
-  20% { transform: rotate(15deg); }
-  40% { transform: rotate(-15deg); }
-  60% { transform: rotate(10deg); }
-  80% { transform: rotate(-10deg); }
+/* Tabular figures for codes, phones, currency and dates */
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
 }
 
-.animate-pulse-subtle {
-  animation: pulseSubtle 2.5s infinite ease-in-out;
+/* Restrained, Purposeful Micro-Transitions */
+.transition-clinical {
+  transition: all 150ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.animate-bell-ring {
-  animation: bellRing 1s ease-in-out;
+/* Splash Progress Animation */
+@keyframes progressAnim {
+  0% { transform: translateX(-100%); }
+  50% { transform: translateX(0%); }
+  100% { transform: translateX(100%); }
 }
 
-/* Modern Scrollbar */
+.animate-progress {
+  animation: progressAnim 1.8s ease-in-out infinite;
+}
+
+/* Respect Reduced Motion */
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Modern Clinical Scrollbar */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
 }
 ::-webkit-scrollbar-track {
   background: transparent;
@@ -46,23 +103,6 @@ body {
 }
 ::-webkit-scrollbar-thumb:hover {
   background: #94a3b8;
-}
-
-/* Focus states for accessibility */
-*:focus-visible {
-  outline: 2px solid #0d9488;
-  outline-offset: 2px;
-}
-
-/* Progress animation for splash screen */
-@keyframes progressAnim {
-  0% { transform: translateX(-100%); }
-  50% { transform: translateX(0%); }
-  100% { transform: translateX(100%); }
-}
-
-.animate-progress {
-  animation: progressAnim 1.8s ease-in-out infinite;
 }
 
 /* Hide Next.js dev indicator badge completely */
@@ -101,3 +141,4 @@ nextjs-portal {
     page-break-inside: avoid;
   }
 }
+

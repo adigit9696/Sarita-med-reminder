@@ -1,4 +1,4 @@
-import type { Customer, CustomerMedicine, CustomerMatchReport, UploadBatch } from '@/types';
+import type { Customer, CustomerMedicine, CustomerMatchReport, UploadBatch, MargDataCheckReport } from '@/types';
 import { 
   normalizeName, 
   normalizePhone, 
@@ -37,6 +37,7 @@ export interface ChronologicalBatchMergeResult {
   consolidatedBatch: UploadBatch;
   sortedBatches: ParsedMargBatch[];
   allDetectedDates: string[];
+  dataCheck?: MargDataCheckReport;
 }
 
 /**
@@ -57,14 +58,14 @@ export function deduplicateCustomerList(customers: Customer[]): Customer[] {
 
     // Check if customer already exists in lookup
     let existingKey: string | undefined;
-    if (phone && phoneToKey.has(phone)) {
+    if (masterMap.has(cust.id)) {
+      existingKey = cust.id;
+    } else if (phone && phoneToKey.has(phone)) {
       existingKey = phoneToKey.get(phone);
     } else if (code && codeToKey.has(code)) {
       existingKey = codeToKey.get(code);
-    } else if (name && nameToKey.has(name)) {
+    } else if (!phone && !code && name && nameToKey.has(name)) {
       existingKey = nameToKey.get(name);
-    } else if (masterMap.has(cust.id)) {
-      existingKey = cust.id;
     }
 
     if (existingKey && masterMap.has(existingKey)) {
@@ -111,7 +112,7 @@ export function deduplicateCustomerList(customers: Customer[]): Customer[] {
       masterMap.set(key, cleanCust);
       if (phone) phoneToKey.set(phone, key);
       if (code) codeToKey.set(code, key);
-      if (name) nameToKey.set(name, key);
+      if (!phone && !code && name) nameToKey.set(name, key);
     }
   });
 
@@ -142,7 +143,7 @@ export function matchAndMergeCustomers(
     const c = masterMap.get(cust.id)!;
     if (c.phoneNorm) phoneIndex.set(c.phoneNorm, c);
     if (c.code) codeIndex.set(c.code.trim().toLowerCase(), c);
-    if (c.nameNorm) nameIndex.set(c.nameNorm, c);
+    if (!c.phoneNorm && !c.code && c.nameNorm) nameIndex.set(c.nameNorm, c);
   });
 
   const report: CustomerMatchReport = {
@@ -167,15 +168,24 @@ export function matchAndMergeCustomers(
       matchedExisting = codeIndex.get(incoming.code.trim().toLowerCase());
       matchType = 'code';
     }
-    // 3. Fallback Match: Normalized Full Name
-    else if (incoming.nameNorm && nameIndex.has(incoming.nameNorm)) {
+    // 3. Fallback Match: Exact ID Match
+    else if (masterMap.has(incoming.id)) {
+      matchedExisting = masterMap.get(incoming.id);
+      matchType = 'name';
+    }
+    // 4. Fallback Match: Normalized Full Name (strictly for name-only customers)
+    else if (!incoming.phoneNorm && !incoming.code && incoming.nameNorm && nameIndex.has(incoming.nameNorm)) {
       matchedExisting = nameIndex.get(incoming.nameNorm);
       matchType = 'name';
     }
 
     if (matchedExisting) {
-      // Strict Rule: Preserve existing manual staff selection (never auto-tick)
-      matchedExisting.isMonthlyRegular = Boolean(matchedExisting.isMonthlyRegular);
+      // Auto-filter rule: Bills >= ₹1,000 automatically added to Monthly Customers; otherwise retain prior staff choice
+      if (incoming.totalSpend >= 1000 || incoming.isMonthlyRegular) {
+        matchedExisting.isMonthlyRegular = true;
+      } else {
+        matchedExisting.isMonthlyRegular = Boolean(matchedExisting.isMonthlyRegular);
+      }
 
       // Idempotent purchase tracking: Only increment months/purchases if this is a newer period
       const isNewerPeriod = incoming.lastPurchaseDate > matchedExisting.lastPurchaseDate;
@@ -205,35 +215,46 @@ export function matchAndMergeCustomers(
       matchedExisting.nextDueDate = computeDueDate(matchedExisting.lastPurchaseDate, customerCycle);
       matchedExisting.alertDate = computeAlertDate(matchedExisting.nextDueDate, alertDaysBefore);
 
-      // Merge Medicines intelligently
-      const medMap = new Map<string, CustomerMedicine>();
-      matchedExisting.medicines.forEach(m => medMap.set(m.nameNorm, m));
+      // Merge Medicines intelligently: do not overwrite real medicines with placeholder
+      const hasRealMeds = matchedExisting.medicines && matchedExisting.medicines.some(m => !m.name.startsWith('Prescription Bill'));
+      const incomingIsPlaceholder = incoming.medicines.length === 1 && incoming.medicines[0].name.startsWith('Prescription Bill');
 
-      incoming.medicines.forEach(inMed => {
-        if (medMap.has(inMed.nameNorm)) {
-          const existMed = medMap.get(inMed.nameNorm)!;
-          existMed.status = 'regular';
-          existMed.qty = inMed.qty;
-          existMed.amount = inMed.amount;
-          existMed.refillCycleDays = customerCycle;
-          if (isNewerPeriod) {
-            existMed.lastPurchaseDate = inMed.lastPurchaseDate;
-            existMed.nextDueDate = computeDueDate(inMed.lastPurchaseDate, customerCycle);
-          }
-          if (inMed.packaging) existMed.packaging = inMed.packaging;
-        } else {
-          // New medicine added to customer's prescription
-          medMap.set(inMed.nameNorm, {
-            ...inMed,
-            refillCycleDays: customerCycle,
-            status: 'new',
-          });
+      if (incomingIsPlaceholder) {
+        if (!hasRealMeds) {
+          matchedExisting.medicines = incoming.medicines;
         }
-      });
+        matchedExisting.totalSpend = (matchedExisting.totalSpend || 0) + incoming.totalSpend;
+      } else if (incoming.medicines.length > 0) {
+        const medMap = new Map<string, CustomerMedicine>();
+        matchedExisting.medicines.forEach(m => medMap.set(m.nameNorm, m));
 
-      matchedExisting.medicines = Array.from(medMap.values());
-      // Idempotent spend: sum from deduplicated medicines
-      matchedExisting.totalSpend = matchedExisting.medicines.reduce((acc, m) => acc + (m.amount || 0), 0);
+        incoming.medicines.forEach(inMed => {
+          if (medMap.has(inMed.nameNorm)) {
+            const existMed = medMap.get(inMed.nameNorm)!;
+            existMed.status = 'regular';
+            existMed.qty = inMed.qty;
+            existMed.amount = inMed.amount;
+            existMed.refillCycleDays = customerCycle;
+            if (isNewerPeriod) {
+              existMed.lastPurchaseDate = inMed.lastPurchaseDate;
+              existMed.nextDueDate = computeDueDate(inMed.lastPurchaseDate, customerCycle);
+            }
+            if (inMed.packaging) existMed.packaging = inMed.packaging;
+          } else {
+            // New medicine added to customer's prescription
+            medMap.set(inMed.nameNorm, {
+              ...inMed,
+              refillCycleDays: customerCycle,
+              status: 'new',
+            });
+          }
+        });
+
+        matchedExisting.medicines = Array.from(medMap.values());
+        matchedExisting.totalSpend = matchedExisting.medicines.reduce((acc, m) => acc + (m.amount || 0), 0);
+      } else {
+        matchedExisting.totalSpend = (matchedExisting.totalSpend || 0) + incoming.totalSpend;
+      }
       matchedExisting.updatedAt = new Date().toISOString();
 
       report.matchedMonthlyCustomers.push({
@@ -243,12 +264,13 @@ export function matchAndMergeCustomers(
       });
     } else {
       // ===== NEW CUSTOMER ONLY =====
+      const isOver1000 = Boolean(incoming.totalSpend >= 1000 || incoming.isMonthlyRegular);
       const deterministicId = generateDeterministicCustomerId(incoming.phoneNorm, incoming.code, incoming.nameNorm);
       const newCust: Customer = {
         ...incoming,
         id: deterministicId,
-        isMonthlyRegular: false, // Strict Rule: new customers from Excel are ALWAYS saved as Unselected
-        regularityScore: 40,
+        isMonthlyRegular: isOver1000, // AUTO-FILTER: >= ₹1,000 auto-selected for Monthly Customers; under ₹1,000 unselected
+        regularityScore: isOver1000 ? 95 : 40,
         refillCycleDays: incoming.refillCycleDays && incoming.refillCycleDays > 0 ? incoming.refillCycleDays : defaultCycleDays,
         nextDueDate: computeDueDate(incoming.lastPurchaseDate, defaultCycleDays),
         alertDate: computeAlertDate(computeDueDate(incoming.lastPurchaseDate, defaultCycleDays), alertDaysBefore),
@@ -344,7 +366,8 @@ export function matchAndMergeChronologicalBatches(
     const c = masterMap.get(cust.id)!;
     if (c.phoneNorm) phoneIndex.set(c.phoneNorm, c);
     if (c.code) codeIndex.set(c.code.trim().toLowerCase(), c);
-    if (c.nameNorm) nameIndex.set(c.nameNorm, c);
+    // STRICT: nameIndex ONLY holds customers with neither phone nor code
+    if (!c.phoneNorm && !c.code && c.nameNorm) nameIndex.set(c.nameNorm, c);
   });
 
   const newCustomersMap = new Map<string, Customer>();
@@ -369,6 +392,10 @@ export function matchAndMergeChronologicalBatches(
     if (bStart && (!earliestDate || bStart < earliestDate)) earliestDate = bStart;
     if (bEnd && (!latestDate || bEnd > latestDate)) latestDate = bEnd;
 
+    const batchPeriodKey = (batch.periodStart && batch.periodEnd)
+      ? `${batch.periodStart}_${batch.periodEnd}`
+      : undefined;
+
     const batchCustomers = batch.customers || [];
     batchCustomers.forEach(incoming => {
       if (!incoming) return;
@@ -379,19 +406,39 @@ export function matchAndMergeChronologicalBatches(
       // Find matching existing customer in master
       let matchedExisting: Customer | undefined;
 
-      if (incoming.phoneNorm && phoneIndex.has(incoming.phoneNorm)) {
+      // 1. Exact ID
+      if (masterMap.has(incoming.id)) {
+        matchedExisting = masterMap.get(incoming.id);
+      }
+      // 2. Phone
+      else if (incoming.phoneNorm && phoneIndex.has(incoming.phoneNorm)) {
         matchedExisting = phoneIndex.get(incoming.phoneNorm);
-      } else if (incoming.code && codeIndex.has(incoming.code.trim().toLowerCase())) {
+      }
+      // 3. Code
+      else if (incoming.code && codeIndex.has(incoming.code.trim().toLowerCase())) {
         matchedExisting = codeIndex.get(incoming.code.trim().toLowerCase());
-      } else if (incoming.nameNorm && nameIndex.has(incoming.nameNorm)) {
+      }
+      // 4. Name-only (strictly for customers without phone or code)
+      else if (!incoming.phoneNorm && !incoming.code && incoming.nameNorm && nameIndex.has(incoming.nameNorm)) {
         matchedExisting = nameIndex.get(incoming.nameNorm);
       }
 
       if (matchedExisting) {
         matchedCustomerIds.add(matchedExisting.id);
 
-        // Strict rule: preserve staff manual monthly selection
-        matchedExisting.isMonthlyRegular = Boolean(matchedExisting.isMonthlyRegular);
+        // Re-upload idempotency check
+        const isAlreadyImported = Boolean(
+          batch.formatType === 'MARG_BILL_WISE_STATEMENT' &&
+          batchPeriodKey &&
+          matchedExisting.lastBillWisePeriod === batchPeriodKey
+        );
+
+        // Auto-filter rule: Bills >= ₹1,000 auto-selected for Monthly Customers; otherwise retain prior staff choice
+        if (incoming.totalSpend >= 1000 || incoming.isMonthlyRegular) {
+          matchedExisting.isMonthlyRegular = true;
+        } else {
+          matchedExisting.isMonthlyRegular = Boolean(matchedExisting.isMonthlyRegular);
+        }
 
         // Check if incoming bill is on or after current recorded date
         const isNewerOrSame = !matchedExisting.lastPurchaseDate || pDate >= matchedExisting.lastPurchaseDate;
@@ -402,8 +449,8 @@ export function matchAndMergeChronologicalBatches(
         matchedExisting.refillCycleDays = customerCycle;
 
         if (isNewerOrSame) {
-          // If this is a later day in the month, increment active tracking
-          if (pDate > matchedExisting.lastPurchaseDate) {
+          // If this is a later day in the month, increment active tracking (unless already imported)
+          if (pDate > matchedExisting.lastPurchaseDate && !isAlreadyImported) {
             matchedExisting.monthsActive = (matchedExisting.monthsActive || 1) + 1;
           }
           matchedExisting.lastPurchaseDate = pDate;
@@ -427,54 +474,73 @@ export function matchAndMergeChronologicalBatches(
             fileName: batch.fileName,
           });
 
-          // Merge medicines: incoming medicines are latest prescription
-          const medMap = new Map<string, CustomerMedicine>();
-          matchedExisting.medicines.forEach(m => medMap.set(m.nameNorm, m));
+          // Merge medicines: preserve real medicines if incoming is only a placeholder
+          const hasRealMeds = matchedExisting.medicines && matchedExisting.medicines.some(m => !m.name.startsWith('Prescription Bill'));
+          const incomingIsPlaceholder = incoming.medicines.length === 1 && incoming.medicines[0].name.startsWith('Prescription Bill');
 
-          incoming.medicines.forEach(inMed => {
-            if (medMap.has(inMed.nameNorm)) {
-              const existMed = medMap.get(inMed.nameNorm)!;
-              existMed.status = 'regular';
-              existMed.qty = inMed.qty;
-              existMed.amount = inMed.amount;
-              existMed.refillCycleDays = customerCycle;
-              existMed.lastPurchaseDate = pDate;
-              existMed.nextDueDate = matchedExisting.nextDueDate;
-              if (inMed.packaging) existMed.packaging = inMed.packaging;
-            } else {
-              medMap.set(inMed.nameNorm, {
-                ...inMed,
-                refillCycleDays: customerCycle,
-                status: 'regular',
-                lastPurchaseDate: pDate,
-                nextDueDate: matchedExisting.nextDueDate,
-              });
+          if (incomingIsPlaceholder) {
+            if (!hasRealMeds) {
+              matchedExisting.medicines = incoming.medicines;
             }
-          });
+          } else if (incoming.medicines.length > 0) {
+            const medMap = new Map<string, CustomerMedicine>();
+            matchedExisting.medicines.forEach(m => medMap.set(m.nameNorm, m));
 
-          matchedExisting.medicines = Array.from(medMap.values());
+            incoming.medicines.forEach(inMed => {
+              if (medMap.has(inMed.nameNorm)) {
+                const existMed = medMap.get(inMed.nameNorm)!;
+                existMed.status = 'regular';
+                existMed.qty = inMed.qty;
+                existMed.amount = inMed.amount;
+                existMed.refillCycleDays = customerCycle;
+                existMed.lastPurchaseDate = pDate;
+                existMed.nextDueDate = matchedExisting.nextDueDate;
+                if (inMed.packaging) existMed.packaging = inMed.packaging;
+              } else {
+                medMap.set(inMed.nameNorm, {
+                  ...inMed,
+                  refillCycleDays: customerCycle,
+                  status: 'regular',
+                  lastPurchaseDate: pDate,
+                  nextDueDate: matchedExisting.nextDueDate,
+                });
+              }
+            });
+
+            matchedExisting.medicines = Array.from(medMap.values());
+          }
         } else {
-          // Incoming bill is older than already recorded date: merge any missing medicines only
-          const medMap = new Map<string, CustomerMedicine>();
-          matchedExisting.medicines.forEach(m => medMap.set(m.nameNorm, m));
-          incoming.medicines.forEach(inMed => {
-            if (!medMap.has(inMed.nameNorm)) {
-              medMap.set(inMed.nameNorm, {
-                ...inMed,
-                refillCycleDays: customerCycle,
-                status: 'regular',
-              });
-            }
-          });
-          matchedExisting.medicines = Array.from(medMap.values());
+          // Incoming bill is older than already recorded date: merge any missing medicines only (if not placeholder)
+          const incomingIsPlaceholder = incoming.medicines.length === 1 && incoming.medicines[0].name.startsWith('Prescription Bill');
+          if (!incomingIsPlaceholder && incoming.medicines.length > 0) {
+            const medMap = new Map<string, CustomerMedicine>();
+            matchedExisting.medicines.forEach(m => medMap.set(m.nameNorm, m));
+            incoming.medicines.forEach(inMed => {
+              if (!medMap.has(inMed.nameNorm)) {
+                medMap.set(inMed.nameNorm, {
+                  ...inMed,
+                  refillCycleDays: customerCycle,
+                  status: 'regular',
+                });
+              }
+            });
+            matchedExisting.medicines = Array.from(medMap.values());
+          }
         }
 
-        matchedExisting.totalPurchases = (matchedExisting.totalPurchases || 1) + 1;
-        matchedExisting.totalSpend = (matchedExisting.totalSpend || 0) + (incoming.totalSpend || 0);
+        // Only accumulate purchases and spend if not already imported from this bill-wise period
+        if (!isAlreadyImported) {
+          matchedExisting.totalPurchases = (matchedExisting.totalPurchases || 1) + 1;
+          matchedExisting.totalSpend = (matchedExisting.totalSpend || 0) + (incoming.totalSpend || 0);
+          if (batchPeriodKey) {
+            matchedExisting.lastBillWisePeriod = batchPeriodKey;
+          }
+        }
         matchedExisting.regularityScore = Math.min(100, Math.max(80, (matchedExisting.regularityScore || 50) + 15));
         matchedExisting.updatedAt = new Date().toISOString();
       } else {
         // ===== BRAND NEW CUSTOMER =====
+        const isOver1000 = Boolean(incoming.totalSpend >= 1000 || incoming.isMonthlyRegular);
         const deterministicId = generateDeterministicCustomerId(incoming.phoneNorm, incoming.code, incoming.nameNorm);
         const customerCycle = incoming.refillCycleDays && incoming.refillCycleDays > 0 ? incoming.refillCycleDays : defaultCycleDays;
         const nextDue = computeDueDate(pDate, customerCycle);
@@ -482,8 +548,8 @@ export function matchAndMergeChronologicalBatches(
         const newCust: Customer = {
           ...incoming,
           id: deterministicId,
-          isMonthlyRegular: false, // Strict Rule: new customers from Excel are ALWAYS saved as Unticked
-          regularityScore: 40,
+          isMonthlyRegular: isOver1000, // AUTO-FILTER: >= ₹1,000 auto-selected for Monthly Customers; under ₹1,000 unselected
+          regularityScore: isOver1000 ? 95 : 40,
           refillCycleDays: customerCycle,
           lastPurchaseDate: pDate,
           firstPurchaseDate: incoming.firstPurchaseDate || pDate,
@@ -491,12 +557,15 @@ export function matchAndMergeChronologicalBatches(
           alertDate: computeAlertDate(nextDue, alertDaysBefore),
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
+          lastBillWisePeriod: batchPeriodKey,
         };
 
         masterMap.set(newCust.id, newCust);
         if (newCust.phoneNorm) phoneIndex.set(newCust.phoneNorm, newCust);
         if (newCust.code) codeIndex.set(newCust.code.trim().toLowerCase(), newCust);
-        if (newCust.nameNorm) nameIndex.set(newCust.nameNorm, newCust);
+        if (!newCust.phoneNorm && !newCust.code && newCust.nameNorm) {
+          nameIndex.set(newCust.nameNorm, newCust);
+        }
 
         newCustomersMap.set(newCust.id, newCust);
         patientLatestBillSource.set(newCust.id, {
@@ -523,6 +592,8 @@ export function matchAndMergeChronologicalBatches(
       ? `${monthInfo.monthName} Multi-Day (${sortedBatches.length} Sheets)`
       : sortedBatches[0].fileName;
 
+  const dataCheck = sortedBatches.find(b => b.dataCheck)?.dataCheck;
+
   const consolidatedBatch: UploadBatch = {
     id: 'batch_' + Date.now(),
     fileName: cleanBatchName,
@@ -545,6 +616,7 @@ export function matchAndMergeChronologicalBatches(
     folderName: folderName || undefined,
     filesCount: sortedBatches.length,
     dailyFilesList: sortedBatches.map(b => b.fileName),
+    dataCheck,
   };
 
   const allDetectedDates = Object.keys(dateDistribution).sort();
@@ -564,6 +636,7 @@ export function matchAndMergeChronologicalBatches(
     consolidatedBatch,
     sortedBatches,
     allDetectedDates,
+    dataCheck,
   };
 }
 

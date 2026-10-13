@@ -106,10 +106,10 @@ export const PinLockModal: React.FC<PinLockModalProps> = ({
 
   return (
     <div 
-      className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 select-none animate-fadeIn"
+      className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 select-none"
       onClick={() => hiddenInputRef.current?.focus()}
     >
-      <div className="w-full max-w-sm bg-white rounded-3xl shadow-2xl border border-slate-100 p-6 sm:p-8 flex flex-col items-center">
+      <div className="w-full max-w-sm bg-white rounded-2xl shadow-xl border border-slate-200/90 p-6 sm:p-8 flex flex-col items-center">
         {/* Hidden input for mobile keyboard / accessibility auto-fill */}
         <input
           ref={hiddenInputRef}
@@ -129,27 +129,27 @@ export const PinLockModal: React.FC<PinLockModalProps> = ({
         />
 
         {/* Brand Icon */}
-        <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-teal-600 to-emerald-500 flex items-center justify-center shadow-lg shadow-teal-500/25 text-white mb-4">
-          <Pill className="w-8 h-8 text-white" />
+        <div className="w-14 h-14 rounded-2xl bg-teal-600 flex items-center justify-center shadow-xs text-white ring-1 ring-teal-500/30 mb-4">
+          <Pill className="w-7 h-7 text-white stroke-[2]" />
         </div>
 
         <h2 className="text-xl font-bold text-slate-900 tracking-tight">
-          Sarita Pharmacy
+          {BRAND.pharmacy.name}
         </h2>
         <p className="text-xs text-slate-500 mt-1">
           Enter staff PIN to unlock
         </p>
 
         {/* PIN Indicators with instant auto-enter feedback */}
-        <div className={`flex justify-center items-center gap-3.5 my-6 ${error ? 'animate-shake' : ''}`}>
+        <div className="flex justify-center items-center gap-3.5 my-6">
           {Array.from({ length: pinLength }).map((_, i) => (
             <div
               key={i}
-              className={`w-4 h-4 rounded-full border-2 transition-all duration-150 ${
+              className={`w-3.5 h-3.5 rounded-full border-2 transition-clinical ${
                 i < pin.length
                   ? error
-                    ? 'bg-rose-500 border-rose-500 scale-110 shadow-sm shadow-rose-300'
-                    : 'bg-teal-600 border-teal-600 scale-110 shadow-sm shadow-teal-300'
+                    ? 'bg-rose-600 border-rose-600 scale-110 shadow-2xs'
+                    : 'bg-teal-600 border-teal-600 scale-110 shadow-2xs'
                   : 'bg-slate-100 border-slate-300'
               }`}
             />
@@ -157,7 +157,7 @@ export const PinLockModal: React.FC<PinLockModalProps> = ({
         </div>
 
         {error ? (
-          <p className="text-xs font-semibold text-rose-600 mb-4 animate-fadeIn">
+          <p className="text-xs font-bold text-rose-600 mb-4">
             Incorrect PIN. Please try again.
           </p>
         ) : (
@@ -173,7 +173,7 @@ export const PinLockModal: React.FC<PinLockModalProps> = ({
               key={num}
               type="button"
               onClick={() => handleDigit(num)}
-              className="h-13 rounded-2xl bg-slate-50 hover:bg-teal-50 active:bg-teal-100 active:scale-95 text-slate-800 hover:text-teal-700 font-bold text-lg border border-slate-200 transition-all shadow-2xs flex items-center justify-center select-none"
+              className="h-13 rounded-xl bg-slate-50 hover:bg-teal-50 active:bg-teal-100 active:scale-95 text-slate-800 hover:text-teal-900 font-bold text-lg border border-slate-200/90 transition-clinical shadow-2xs flex items-center justify-center select-none cursor-pointer"
             >
               {num}
             </button>
@@ -181,21 +181,21 @@ export const PinLockModal: React.FC<PinLockModalProps> = ({
           <button
             type="button"
             onClick={handleClear}
-            className="h-13 rounded-2xl bg-slate-50 hover:bg-slate-100 active:scale-95 text-slate-500 font-semibold text-xs border border-slate-200 transition-all flex items-center justify-center select-none"
+            className="h-13 rounded-xl bg-slate-50 hover:bg-slate-100 active:scale-95 text-slate-500 hover:text-slate-700 font-semibold text-xs border border-slate-200/90 transition-clinical flex items-center justify-center select-none cursor-pointer"
           >
             Clear
           </button>
           <button
             type="button"
             onClick={() => handleDigit('0')}
-            className="h-13 rounded-2xl bg-slate-50 hover:bg-teal-50 active:bg-teal-100 active:scale-95 text-slate-800 hover:text-teal-700 font-bold text-lg border border-slate-200 transition-all shadow-2xs flex items-center justify-center select-none"
+            className="h-13 rounded-xl bg-slate-50 hover:bg-teal-50 active:bg-teal-100 active:scale-95 text-slate-800 hover:text-teal-900 font-bold text-lg border border-slate-200/90 transition-clinical shadow-2xs flex items-center justify-center select-none cursor-pointer"
           >
             0
           </button>
           <button
             type="button"
             onClick={handleBackspace}
-            className="h-13 rounded-2xl bg-slate-50 hover:bg-slate-100 active:scale-95 text-slate-600 border border-slate-200 transition-all flex items-center justify-center select-none"
+            className="h-13 rounded-xl bg-slate-50 hover:bg-slate-100 active:scale-95 text-slate-600 border border-slate-200/90 transition-clinical flex items-center justify-center select-none cursor-pointer"
             title="Backspace"
           >
             <Delete className="w-5 h-5 text-slate-600" />

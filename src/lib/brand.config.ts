@@ -9,14 +9,14 @@ export const BRAND = {
     email: "rahulrai1101@rediffmail.com",
   },
   colors: {
-    primary: "#0d9488", // Teal 600
+    primary: "#0d9488", // Teal 600 (Clinical Core)
     primaryDark: "#0f766e", // Teal 700
     primaryLight: "#14b8a6", // Teal 500
-    primarySurface: "#f0fdfa", // Teal 50
+    primarySurface: "#f0fdfa", // Teal 50 (Calm Surface)
     accent: "#0284c7", // Sky 600
-    warning: "#f59e0b", // Amber 500
-    danger: "#ef4444", // Red 500
-    success: "#10b981", // Emerald 500
+    warning: "#d97706", // Amber 600 (WCAG AA Compliant)
+    danger: "#dc2626", // Red 600 (WCAG AA Compliant)
+    success: "#059669", // Emerald 600 (WCAG AA Compliant)
   },
   defaults: {
     refillCycleDays: 30,

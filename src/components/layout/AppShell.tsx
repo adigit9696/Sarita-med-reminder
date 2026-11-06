@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { SplashScreen } from './SplashScreen';
 import { Sidebar, type NavTab } from './Sidebar';
 import { TopBar } from './TopBar';
@@ -18,6 +18,7 @@ import { PrintListView } from '../print/PrintListView';
 import { SettingsView } from '../settings/SettingsView';
 import { dataStore } from '@/lib/data-store';
 import { audioAlerts } from '@/lib/audio-alerts';
+import { computeMissingCustomers } from '@/lib/monthly-comparator';
 import type { Customer, ReminderItem } from '@/types';
 
 export const AppShell: React.FC = () => {
@@ -159,12 +160,17 @@ export const AppShell: React.FC = () => {
     URL.revokeObjectURL(url);
   };
 
+  // Compute missing customers dynamically for active notification badges
+  const { missingCustomerIds, hasComparison } = useMemo(() => {
+    return computeMissingCustomers(batches, customers);
+  }, [batches, customers]);
+
   const dueIn5DaysCount = reminders.filter(
-    (r) => r.urgency === 'DUE_IN_5_DAYS' && r.status === 'pending'
+    (r) => r.urgency === 'DUE_IN_5_DAYS' && r.status === 'pending' && (!hasComparison || !missingCustomerIds.has(r.customerId))
   ).length;
 
   const overdueCount = reminders.filter(
-    (r) => r.urgency === 'OVERDUE' && r.status === 'pending'
+    (r) => r.urgency === 'OVERDUE' && r.status === 'pending' && (!hasComparison || !missingCustomerIds.has(r.customerId))
   ).length;
 
   const handleTabChange = (tab: NavTab) => {
@@ -261,6 +267,7 @@ export const AppShell: React.FC = () => {
             <DashboardView
               customers={customers}
               reminders={reminders}
+              batches={batches}
               searchQuery={searchQuery}
               onClearSearch={() => setSearchQuery('')}
               onSelectCustomer={(c) => setSelectedCustomer(c)}
@@ -274,6 +281,7 @@ export const AppShell: React.FC = () => {
           {activeTab === 'monthly' && (
             <MonthlyCustomersView
               customers={customers}
+              batches={batches}
               onSelectCustomer={(c) => setSelectedCustomer(c)}
               onMarkRefilled={handleMarkRefilled}
               onRecordDispensedDate={handleRecordDispensedDate}
@@ -317,6 +325,7 @@ export const AppShell: React.FC = () => {
             <PrintListView
               customers={customers}
               reminders={reminders}
+              batches={batches}
             />
           )}
 

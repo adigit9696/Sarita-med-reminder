@@ -16,14 +16,16 @@ import {
   Bell,
   Calendar
 } from 'lucide-react';
-import type { Customer } from '@/types';
+import type { Customer, UploadBatch } from '@/types';
 import { getDaysRemaining } from '@/lib/refill-calculator';
 import { formatWhatsAppReminderMessage, openWhatsAppChat } from '@/lib/whatsapp';
 import { DispenseCalendarModal } from '../modals/DispenseCalendarModal';
+import { computeMissingCustomers } from '@/lib/monthly-comparator';
 import { dataStore } from '@/lib/data-store';
 
 interface MonthlyCustomersViewProps {
   customers: Customer[];
+  batches?: UploadBatch[];
   onSelectCustomer: (cust: Customer) => void;
   onMarkRefilled: (customerId: string) => void;
   onRecordDispensedDate?: (customerId: string, dispensedDate: string, cycleDays?: number) => void;
@@ -32,26 +34,33 @@ interface MonthlyCustomersViewProps {
 
 export const MonthlyCustomersView: React.FC<MonthlyCustomersViewProps> = ({
   customers,
+  batches,
   onSelectCustomer,
   onMarkRefilled,
   onRecordDispensedDate,
   whatsappTemplate,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'ALL' | 'DUE_SOON' | 'OVERDUE' | 'COMPLETED'>('ALL');
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'DUE_SOON' | 'OVERDUE' | 'COMPLETED' | 'MISSING'>('ALL');
   const [calendarCustomer, setCalendarCustomer] = useState<Customer | null>(null);
 
-  // Compute missing customers dynamically
-  const { missingCustomerIds, previousMonthLabel } = useMemo(() => {
-    return dataStore.getMissingCustomersInfo();
-  }, [customers]);
+  // Compute missing customers dynamically from batches
+  const effectiveBatches = batches || dataStore.getBatches();
+  const { missingCustomerIds, previousMonthLabel, hasComparison } = useMemo(() => {
+    return computeMissingCustomers(effectiveBatches, customers);
+  }, [effectiveBatches, customers]);
 
   // Filter only regular monthly customers who are active
   const monthlyCustomers = (customers || []).filter((c) => c && c.isMonthlyRegular && c.status === 'active');
 
+  const missingCount = useMemo(() => {
+    return monthlyCustomers.filter(c => missingCustomerIds.has(c.id)).length;
+  }, [monthlyCustomers, missingCustomerIds]);
+
   const filtered = monthlyCustomers.filter((c) => {
     if (!c) return false;
     const days = getDaysRemaining(c.nextDueDate);
+    if (statusFilter === 'MISSING' && !missingCustomerIds.has(c.id)) return false;
     if (statusFilter === 'DUE_SOON' && !(days >= 0 && days <= 5)) return false;
     if (statusFilter === 'OVERDUE' && !(days < 0)) return false;
     if (statusFilter === 'COMPLETED' && !(days > 5)) return false;
@@ -172,7 +181,25 @@ export const MonthlyCustomersView: React.FC<MonthlyCustomersViewProps> = ({
             <option value="DUE_SOON">Alert Mode ({alertModeCount})</option>
             <option value="OVERDUE">Overdue ({overdueCount})</option>
             <option value="COMPLETED">Complete / Countdown</option>
+            {hasComparison && missingCount > 0 && (
+              <option value="MISSING">Missing Patients ({missingCount})</option>
+            )}
           </select>
+          {hasComparison && missingCount > 0 && (
+            <button
+              type="button"
+              onClick={() => setStatusFilter(statusFilter === 'MISSING' ? 'ALL' : 'MISSING')}
+              className={`px-3 py-2 rounded-xl text-xs font-bold transition-clinical shadow-2xs active:scale-95 cursor-pointer flex items-center justify-center gap-1.5 shrink-0 ${
+                statusFilter === 'MISSING'
+                  ? 'bg-rose-600 text-white shadow-xs'
+                  : 'bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100 hover:text-rose-800'
+              }`}
+              title="Filter customers missing since previous month"
+            >
+              <AlertCircle className="w-3.5 h-3.5 text-rose-600" />
+              <span>Missing ({missingCount})</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -184,11 +211,15 @@ export const MonthlyCustomersView: React.FC<MonthlyCustomersViewProps> = ({
             <h3 className="text-sm font-bold text-slate-900">
               {monthlyCustomers.length === 0 
                 ? 'No Monthly Customers Selected Yet' 
+                : statusFilter === 'MISSING'
+                ? 'No Missing Customers Detected'
                 : 'No Customers Match Search Criteria'}
             </h3>
             <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
               {monthlyCustomers.length === 0
                 ? 'Go to "All Customers" and tick "Track Monthly" next to any patient to add them to this monthly roster.'
+                : statusFilter === 'MISSING'
+                ? 'All monthly regular patients from the previous month are present in the latest month\'s records.'
                 : 'Try adjusting your search terms or filter.'}
             </p>
           </div>

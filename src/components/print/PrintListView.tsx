@@ -12,13 +12,16 @@ import {
   RotateCcw, 
   AlertTriangle,
 } from 'lucide-react';
-import type { Customer, ReminderItem } from '@/types';
+import type { Customer, ReminderItem, UploadBatch } from '@/types';
 import { BRAND } from '@/lib/brand.config';
 import { getDaysRemaining } from '@/lib/refill-calculator';
+import { computeMissingCustomers } from '@/lib/monthly-comparator';
+import { dataStore } from '@/lib/data-store';
 
 interface PrintListViewProps {
   customers: Customer[];
   reminders: ReminderItem[];
+  batches?: UploadBatch[];
 }
 
 export type PrintMode = 'CALL_SHEET' | 'DELIVERY_LABELS';
@@ -34,6 +37,7 @@ export type PresetKey =
   | 'FULL_MONTH' 
   | 'DUE_5_DAYS' 
   | 'OVERDUE' 
+  | 'MISSING'
   | 'ALL' 
   | 'CUSTOM';
 
@@ -53,6 +57,7 @@ interface PrintCustomerRow {
   medicinesList: string[];
   isMonthlyRegular: boolean;
   hasPhone: boolean;
+  isMissing?: boolean;
 }
 
 function formatDateDisplay(isoDate: string): string {
@@ -74,7 +79,14 @@ function getLastDayOfMonth(yearMonth: string): string {
 export const PrintListView: React.FC<PrintListViewProps> = ({
   customers,
   reminders,
+  batches,
 }) => {
+  // Compute missing customers dynamically
+  const effectiveBatches = batches || dataStore.getBatches();
+  const { missingCustomerIds, previousMonthLabel, hasComparison } = useMemo(() => {
+    return computeMissingCustomers(effectiveBatches, customers);
+  }, [effectiveBatches, customers]);
+
   // 1. Detect uploaded months in the dataset
   const { detectedMonth, availableMonths } = useMemo(() => {
     const monthCounts: Record<string, number> = {};
@@ -118,6 +130,14 @@ export const PrintListView: React.FC<PrintListViewProps> = ({
   const remindersMap = useMemo(() => {
     return new Map<string, ReminderItem>(reminders.map((r) => [r.customerId, r]));
   }, [reminders]);
+
+  // Count of missing customers within current scope
+  const missingCount = useMemo(() => {
+    return customers.filter(c => {
+      if (customerScope === 'MONTHLY' && !c.isMonthlyRegular) return false;
+      return missingCustomerIds.has(c.id);
+    }).length;
+  }, [customers, customerScope, missingCustomerIds]);
 
   // Handler for preset button clicks
   const applyPreset = (preset: PresetKey, targetMonth: string = activeMonth) => {
@@ -167,6 +187,11 @@ export const PrintListView: React.FC<PrintListViewProps> = ({
         setEndDate(yesterday);
         break;
       }
+      case 'MISSING':
+        setDateTarget('BILL_DATE');
+        setStartDate('');
+        setEndDate('');
+        break;
       case 'ALL':
         setStartDate('');
         setEndDate('');
@@ -209,6 +234,11 @@ export const PrintListView: React.FC<PrintListViewProps> = ({
     const rows: PrintCustomerRow[] = [];
 
     for (const cust of customers) {
+      // Missing Preset Filter: only include missing customers
+      if (activePreset === 'MISSING' && (!hasComparison || !missingCustomerIds.has(cust.id))) {
+        continue;
+      }
+
       // Scope Filter: Monthly Regulars (≥ ₹1,000) vs All
       if (customerScope === 'MONTHLY' && !cust.isMonthlyRegular) {
         continue;
@@ -330,6 +360,7 @@ export const PrintListView: React.FC<PrintListViewProps> = ({
         medicinesList: effectiveMedicines,
         isMonthlyRegular: cust.isMonthlyRegular,
         hasPhone,
+        isMissing: hasComparison && missingCustomerIds.has(cust.id),
       });
     }
 
@@ -369,7 +400,10 @@ export const PrintListView: React.FC<PrintListViewProps> = ({
     dateTarget, 
     searchQuery, 
     sortBy, 
-    remindersMap
+    remindersMap,
+    activePreset,
+    hasComparison,
+    missingCustomerIds,
   ]);
 
   // Statistics for the current filtered view
@@ -405,12 +439,15 @@ export const PrintListView: React.FC<PrintListViewProps> = ({
   });
 
   const dateFilterLabel = useMemo(() => {
+    if (activePreset === 'MISSING') {
+      return `Missing Patients (Absent in Current Month · Last Purchased in ${previousMonthLabel || 'Previous Month'})`;
+    }
     if (!startDate && !endDate) return 'All Dates (Full Dataset)';
     const startStr = formatDateDisplay(startDate);
     const endStr = formatDateDisplay(endDate);
     const targetStr = dateTarget === 'BILL_DATE' ? 'Bill Dates' : 'Refill Due Dates';
     return `${targetStr}: ${startStr} to ${endStr}`;
-  }, [startDate, endDate, dateTarget]);
+  }, [activePreset, previousMonthLabel, startDate, endDate, dateTarget]);
 
   return (
     <div className="space-y-6">
@@ -641,6 +678,22 @@ export const PrintListView: React.FC<PrintListViewProps> = ({
             >
               All Dates
             </button>
+
+            {hasComparison && missingCount > 0 && (
+              <button
+                type="button"
+                onClick={() => applyPreset('MISSING')}
+                className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all border cursor-pointer flex items-center gap-1 ${
+                  activePreset === 'MISSING'
+                    ? 'bg-rose-50 border-rose-500 text-rose-800 shadow-2xs ring-1 ring-rose-500 font-bold'
+                    : 'bg-rose-50/60 border-rose-200 text-rose-700 hover:bg-rose-100 hover:text-rose-800'
+                }`}
+                title="Filter all customers missing since previous month"
+              >
+                <AlertTriangle className="w-3 h-3 text-rose-600" />
+                <span>Missing Customers ({missingCount})</span>
+              </button>
+            )}
           </div>
 
           {/* Date Picker Range Inputs */}
@@ -791,7 +844,9 @@ export const PrintListView: React.FC<PrintListViewProps> = ({
             </p>
             <div className="mt-1.5">
               <span className="text-xs font-bold text-teal-900 uppercase tracking-wider block">
-                {printMode === 'CALL_SHEET'
+                {activePreset === 'MISSING'
+                  ? `Missing Patients Recall & Outreach Sheet — ${dateFilterLabel}`
+                  : printMode === 'CALL_SHEET'
                   ? `Staff & Owner Follow-Up Call Sheet — ${dateFilterLabel}`
                   : `Customer Delivery Bag Labels — ${dateFilterLabel}`}
               </span>
@@ -868,9 +923,16 @@ export const PrintListView: React.FC<PrintListViewProps> = ({
 
                     {/* Patient & Contact */}
                     <td className="py-3 px-3">
-                      <p className="font-bold text-slate-900 text-xs">
-                        {row.customerName}
-                      </p>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <p className="font-bold text-slate-900 text-xs">
+                          {row.customerName}
+                        </p>
+                        {row.isMissing && (
+                          <span className="text-[9px] font-bold text-rose-700 bg-rose-50 border border-rose-200 px-1 py-0.2 rounded print:border-slate-300">
+                            Missing
+                          </span>
+                        )}
+                      </div>
                       
                       {row.hasPhone ? (
                         <p className="font-mono text-slate-800 text-[11px] flex items-center gap-1 mt-0.5 font-semibold">

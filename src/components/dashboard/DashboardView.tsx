@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { 
   Users, 
   CalendarClock, 
@@ -18,14 +18,17 @@ import {
   Sparkles,
   Calendar
 } from 'lucide-react';
-import type { Customer, ReminderItem } from '@/types';
+import type { Customer, ReminderItem, UploadBatch } from '@/types';
 import { audioAlerts } from '@/lib/audio-alerts';
 import { formatWhatsAppReminderMessage, openWhatsAppChat } from '@/lib/whatsapp';
 import { DispenseCalendarModal } from '../modals/DispenseCalendarModal';
+import { computeMissingCustomers } from '@/lib/monthly-comparator';
+import { dataStore } from '@/lib/data-store';
 
 interface DashboardViewProps {
   customers: Customer[];
   reminders: ReminderItem[];
+  batches?: UploadBatch[];
   onSelectCustomer: (cust: Customer) => void;
   onMarkRefilled: (customerId: string) => void;
   onRecordDispensedDate?: (customerId: string, dispensedDate: string, cycleDays?: number) => void;
@@ -38,6 +41,7 @@ interface DashboardViewProps {
 export const DashboardView: React.FC<DashboardViewProps> = ({
   customers,
   reminders,
+  batches,
   onSelectCustomer,
   onMarkRefilled,
   onRecordDispensedDate,
@@ -46,27 +50,46 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   searchQuery = '',
   onClearSearch,
 }) => {
-  const [activeFilter, setActiveFilter] = useState<'ACTION_TODAY' | 'DUE_5_DAYS' | 'OVERDUE' | 'CALLED' | 'PENDING'>('ACTION_TODAY');
+  const [activeFilter, setActiveFilter] = useState<'ACTION_TODAY' | 'DUE_5_DAYS' | 'OVERDUE' | 'CALLED' | 'PENDING' | 'MISSING'>('ACTION_TODAY');
   const [calendarCustomer, setCalendarCustomer] = useState<Customer | null>(null);
 
+  // Compute missing customers dynamically from batches
+  const effectiveBatches = batches || dataStore.getBatches();
+  const { missingCustomerIds, previousMonthLabel, hasComparison } = useMemo(() => {
+    return computeMissingCustomers(effectiveBatches, customers);
+  }, [effectiveBatches, customers]);
+
+  const isMissingReminder = (r: ReminderItem) => hasComparison && missingCustomerIds.has(r.customerId);
+  const activeReminders = useMemo(() => reminders.filter((r) => !isMissingReminder(r)), [reminders, hasComparison, missingCustomerIds]);
+  const missingReminders = useMemo(() => reminders.filter((r) => isMissingReminder(r)), [reminders, hasComparison, missingCustomerIds]);
+
   const monthlyCustomers = customers.filter((c) => c.isMonthlyRegular);
-  const dueIn5Days = reminders.filter((r) => r.urgency === 'DUE_IN_5_DAYS' && r.status === 'pending');
-  const overdue = reminders.filter((r) => r.urgency === 'OVERDUE' && r.status === 'pending');
-  const actionToday = reminders.filter((r) => (r.urgency === 'DUE_IN_5_DAYS' || r.urgency === 'OVERDUE') && r.status === 'pending');
+  const dueIn5Days = activeReminders.filter((r) => r.urgency === 'DUE_IN_5_DAYS' && r.status === 'pending');
+  const overdue = activeReminders.filter((r) => r.urgency === 'OVERDUE' && r.status === 'pending');
+  const actionToday = activeReminders.filter((r) => (r.urgency === 'DUE_IN_5_DAYS' || r.urgency === 'OVERDUE') && r.status === 'pending');
 
   const queryLower = searchQuery.toLowerCase().trim();
 
   const filteredReminders = reminders.filter((r) => {
-    if (activeFilter === 'ACTION_TODAY') {
-      if (!((r.urgency === 'DUE_IN_5_DAYS' || r.urgency === 'OVERDUE') && r.status === 'pending')) return false;
-    } else if (activeFilter === 'DUE_5_DAYS') {
-      if (!(r.urgency === 'DUE_IN_5_DAYS' && r.status === 'pending')) return false;
-    } else if (activeFilter === 'OVERDUE') {
-      if (!(r.urgency === 'OVERDUE' && r.status === 'pending')) return false;
-    } else if (activeFilter === 'CALLED') {
-      if (!(r.status === 'called' || r.status === 'confirmed')) return false;
-    } else if (activeFilter === 'PENDING') {
-      if (r.status !== 'pending') return false;
+    const isMissing = isMissingReminder(r);
+
+    if (activeFilter === 'MISSING') {
+      if (!isMissing) return false;
+    } else {
+      // By default, missing customers should not appear in the main list
+      if (isMissing) return false;
+
+      if (activeFilter === 'ACTION_TODAY') {
+        if (!((r.urgency === 'DUE_IN_5_DAYS' || r.urgency === 'OVERDUE') && r.status === 'pending')) return false;
+      } else if (activeFilter === 'DUE_5_DAYS') {
+        if (!(r.urgency === 'DUE_IN_5_DAYS' && r.status === 'pending')) return false;
+      } else if (activeFilter === 'OVERDUE') {
+        if (!(r.urgency === 'OVERDUE' && r.status === 'pending')) return false;
+      } else if (activeFilter === 'CALLED') {
+        if (!(r.status === 'called' || r.status === 'confirmed')) return false;
+      } else if (activeFilter === 'PENDING') {
+        if (r.status !== 'pending') return false;
+      }
     }
 
     if (queryLower) {
@@ -290,8 +313,23 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   : 'bg-slate-100 text-slate-600 font-semibold hover:bg-slate-200/80 hover:text-slate-900'
               }`}
             >
-              All Pending ({reminders.filter(r => r.status === 'pending').length})
+              All Pending ({activeReminders.filter(r => r.status === 'pending').length})
             </button>
+            {hasComparison && missingReminders.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setActiveFilter(activeFilter === 'MISSING' ? 'ACTION_TODAY' : 'MISSING')}
+                className={`px-3 py-1.5 rounded-xl text-xs transition-clinical shadow-2xs active:scale-95 cursor-pointer flex items-center gap-1.5 ${
+                  activeFilter === 'MISSING'
+                    ? 'bg-rose-600 text-white shadow-xs font-bold'
+                    : 'bg-rose-50 text-rose-700 font-semibold border border-rose-200/90 hover:bg-rose-100 hover:text-rose-800'
+                }`}
+                title="Patients from previous month absent in current month"
+              >
+                <AlertTriangle className="w-3.5 h-3.5 text-rose-600" />
+                <span>Missing Customers ({missingReminders.length})</span>
+              </button>
+            )}
           </div>
         </div>
 
@@ -302,10 +340,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               <CheckCircle2 className="w-6 h-6 text-emerald-600" />
             </div>
             <h3 className="text-sm font-bold text-slate-900">
-              No Pending Reminders for Selected Filter
+              {activeFilter === 'MISSING'
+                ? 'No Missing Customers Detected'
+                : 'No Pending Reminders for Selected Filter'}
             </h3>
             <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
-              All monthly patients have received their refills or are not due yet.
+              {activeFilter === 'MISSING'
+                ? 'All patients from the previous month are present in the latest month\'s records.'
+                : 'All monthly patients have received their refills or are not due yet.'}
             </p>
           </div>
         ) : (
@@ -329,20 +371,30 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     const cust = customers.find((c) => c.id === rem.customerId);
                     const isOverdue = rem.daysRemaining < 0;
                     const is5Days = rem.daysRemaining >= 0 && rem.daysRemaining <= 5;
+                    const isMissing = isMissingReminder(rem);
 
                     return (
                       <tr
                         key={rem.id}
-                        className="hover:bg-slate-50/75 transition-clinical group cursor-pointer"
+                        className={`transition-clinical group cursor-pointer ${
+                          isMissing
+                            ? 'bg-rose-50/50 border-l-4 border-l-rose-500 hover:bg-rose-100/50'
+                            : 'hover:bg-slate-50/75'
+                        }`}
                         onClick={() => cust && onSelectCustomer(cust)}
                       >
                         <td className="py-3.5 px-3 text-center font-mono font-medium text-slate-400 text-[11px] tabular-nums">
                           {idx + 1}
                         </td>
                         <td className="py-3.5 px-5 font-bold text-slate-900">
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 flex-wrap">
                             <span>{rem.customerName}</span>
-                            {cust?.isMonthlyRegular && (
+                            {isMissing && (
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200 shadow-2xs">
+                                Missing since {previousMonthLabel || 'last month'}
+                              </span>
+                            )}
+                            {cust?.isMonthlyRegular && !isMissing && (
                               <span className="w-2 h-2 rounded-full bg-teal-600 ring-2 ring-teal-100" title="Monthly Regular Patient"></span>
                             )}
                           </div>
@@ -459,19 +511,29 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 const cust = customers.find((c) => c.id === rem.customerId);
                 const isOverdue = rem.daysRemaining < 0;
                 const is5Days = rem.daysRemaining >= 0 && rem.daysRemaining <= 5;
+                const isMissing = isMissingReminder(rem);
 
                 return (
                   <div
                     key={rem.id}
-                    className="p-4 hover:bg-slate-50/75 transition-clinical space-y-3 cursor-pointer"
+                    className={`p-4 transition-clinical space-y-3 cursor-pointer ${
+                      isMissing
+                        ? 'bg-rose-50/50 border-l-4 border-l-rose-500 hover:bg-rose-100/50'
+                        : 'hover:bg-slate-50/75'
+                    }`}
                     onClick={() => cust && onSelectCustomer(cust)}
                   >
                     <div className="flex items-start justify-between gap-2">
                       <div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
                           <span className="text-xs font-mono text-slate-400 font-medium tabular-nums">#{idx + 1}</span>
                           <span className="font-bold text-sm text-slate-900">{rem.customerName}</span>
-                          {cust?.isMonthlyRegular && (
+                          {isMissing && (
+                            <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
+                              Missing
+                            </span>
+                          )}
+                          {cust?.isMonthlyRegular && !isMissing && (
                             <span className="px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-teal-50 text-teal-700 border border-teal-200">
                               Monthly
                             </span>

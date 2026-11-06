@@ -23,7 +23,7 @@ import {
 import { DEFAULT_WHATSAPP_TEMPLATE } from './whatsapp';
 import { audioAlerts } from './audio-alerts';
 import { deriveMonthInfo } from './marg-parser';
-import { getCustomersForBatch, computeMissingCustomers } from './monthly-comparator';
+import { getCustomersForBatch, computeMissingCustomers, type MissingCustomersResult } from './monthly-comparator';
 
 const CUSTOMERS_KEY = 'sarita_med_customers_v2';
 const BATCHES_KEY = 'sarita_med_batches_v2';
@@ -368,7 +368,7 @@ class DataStoreService {
     return this.customers.filter(c => c.isMonthlyRegular && c.status === 'active');
   }
 
-  public getMissingCustomersInfo(): { missingCustomerIds: Set<string>; previousMonthLabel: string } {
+  public getMissingCustomersInfo(): MissingCustomersResult {
     return computeMissingCustomers(this.batches, this.customers);
   }
 
